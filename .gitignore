@@ -1,0 +1,15 @@
+# Local dev secrets - never commit
+appsettings.Development.json
+
+# .NET build output
+bin/
+obj/
+
+# VS / Rider
+.vs/
+.idea/
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
