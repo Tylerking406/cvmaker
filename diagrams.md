@@ -4,20 +4,25 @@
 
 ```mermaid
 graph TD
-    User(["👤 User (Browser)"])
+    classDef user fill:#4a4a4a,stroke:#222,color:#fff
+    classDef cloudflare fill:#f6821f,stroke:#c96a10,color:#fff
+    classDef railway fill:#6366f1,stroke:#4338ca,color:#fff
+    classDef supabase fill:#3ecf8e,stroke:#1a9e65,color:#000
+
+    User(["👤 User (Browser)"]):::user
 
     subgraph Cloudflare Pages
-        UI["React + TypeScript\nFrontend"]
+        UI["React + TypeScript\nFrontend"]:::cloudflare
     end
 
     subgraph Railway
-        API[".NET Core API"]
-        PDF["QuestPDF\nPDF Generator"]
+        API[".NET Core API"]:::railway
+        PDF["QuestPDF\nPDF Generator"]:::railway
     end
 
     subgraph Supabase
-        AUTH["Supabase Auth\n(auth.users)"]
-        DB[("PostgreSQL\nDatabase")]
+        AUTH["Supabase Auth\n(auth.users)"]:::supabase
+        DB[("PostgreSQL\nDatabase")]:::supabase
     end
 
     %% Auth flow
