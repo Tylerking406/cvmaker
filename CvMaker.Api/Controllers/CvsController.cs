@@ -36,7 +36,22 @@ public class CvsController(AppDbContext db) : ControllerBase
 
         if (cv is null) return NotFound();
 
-        return Ok(cv);
+        return Ok(new CvDetailResponse(
+            cv.Id, cv.UserId, cv.Title, cv.Template, cv.CreatedAt, cv.UpdatedAt,
+            cv.PersonalInfo is null ? null : new PersonalInfoResponse(
+                cv.PersonalInfo.Id, cv.PersonalInfo.CvId, cv.PersonalInfo.FullName,
+                cv.PersonalInfo.JobTitle, cv.PersonalInfo.Email, cv.PersonalInfo.Phone,
+                cv.PersonalInfo.Location, cv.PersonalInfo.LinkedIn, cv.PersonalInfo.GitHub,
+                cv.PersonalInfo.Website, cv.PersonalInfo.Summary),
+            cv.WorkExperiences.Select(w => new WorkExperienceResponse(
+                w.Id, w.CvId, w.Company, w.Role, w.Location, w.StartDate, w.EndDate, w.IsCurrent, w.Bullets, w.OrderIndex)),
+            cv.Educations.Select(e => new EducationResponse(
+                e.Id, e.CvId, e.Institution, e.Degree, e.Field, e.StartDate, e.EndDate, e.IsCurrent, e.Achievements, e.OrderIndex)),
+            cv.Skills.Select(s => new SkillResponse(s.Id, s.CvId, s.Category, s.Items, s.OrderIndex)),
+            cv.Projects.Select(p => new ProjectResponse(p.Id, p.CvId, p.Name, p.Description, p.Bullets, p.Url, p.OrderIndex)),
+            cv.Certifications.Select(c => new CertificationResponse(c.Id, c.CvId, c.Name, c.Issuer, c.IssueDate, c.ExpiryDate, c.Url, c.OrderIndex)),
+            cv.Achievements.Select(a => new AchievementResponse(a.Id, a.CvId, a.Description, a.OrderIndex))
+        ));
     }
 
     [HttpPost]
