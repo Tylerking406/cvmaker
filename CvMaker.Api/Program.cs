@@ -8,7 +8,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Database
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+           .UseSnakeCaseNamingConvention());
 
 // JWT Auth (Supabase - configured later, placeholder for now)
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

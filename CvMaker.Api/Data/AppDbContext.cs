@@ -17,7 +17,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Map to exact table names from schema
+        // Explicit table names to match schema exactly
         modelBuilder.Entity<User>().ToTable("users");
         modelBuilder.Entity<Cv>().ToTable("cvs");
         modelBuilder.Entity<PersonalInfo>().ToTable("personal_info");
@@ -27,6 +27,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<Project>().ToTable("projects");
         modelBuilder.Entity<Certification>().ToTable("certifications");
         modelBuilder.Entity<Achievement>().ToTable("achievements");
+
+        // Fix abbreviations that snake_case gets wrong
+        modelBuilder.Entity<PersonalInfo>().Property(p => p.LinkedIn).HasColumnName("linkedin");
+        modelBuilder.Entity<PersonalInfo>().Property(p => p.GitHub).HasColumnName("github");
 
         // postgres text[] columns
         modelBuilder.Entity<WorkExperience>().Property(e => e.Bullets).HasColumnType("text[]");
