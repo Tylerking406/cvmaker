@@ -1,15 +1,28 @@
-# Local dev secrets - never commit
-appsettings.Development.json
+# ── Secrets & config overrides ──────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+appsettings.*.json          # covers Development, Local, Production overrides, etc.
+!appsettings.json           # base config (no secrets) is fine to commit
+secrets.json
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
 
-# .NET build output
+# ── .NET build output ────────────────────────────────────────────────────────
 bin/
 obj/
 
-# VS / Rider
+# ── IDE & editor ────────────────────────────────────────────────────────────
 .vs/
 .idea/
 *.user
+*.suo
+*.ntvs*
+*.njsproj
 
-# OS
+# ── OS ───────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

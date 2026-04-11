@@ -1,0 +1,34 @@
+# ── Secrets ──────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.local                     # also covers .env.local, .env.development.local, etc.
+
+# ── Dependencies & build ─────────────────────────────────────────────────────
+node_modules
+dist
+dist-ssr
+
+# ── Logs ────────────────────────────────────────────────────────────────────
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Test & tooling output ────────────────────────────────────────────────────
+coverage
+.cache
+.turbo
+
+# ── IDE & editor ────────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.sw?
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
