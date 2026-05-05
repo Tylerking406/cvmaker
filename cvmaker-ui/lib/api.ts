@@ -1,13 +1,32 @@
 const BASE = "/api";
 
+// Global hook so the terminal can intercept fetches without prop-drilling
+type Interceptor = (method: string, url: string, status: number | undefined, duration: number | undefined, error?: string) => void;
+let interceptor: Interceptor | null = null;
+export function setApiInterceptor(fn: Interceptor | null) { interceptor = fn; }
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  const method = (options?.method ?? "GET").toUpperCase();
+  const url = `${BASE}${path}`;
+  const start = performance.now();
+
+  interceptor?.(method, url, undefined, undefined);
+
+  try {
+    const res = await fetch(url, {
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      ...options,
+    });
+    const duration = Math.round(performance.now() - start);
+    interceptor?.(method, url, res.status, duration);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    if (res.status === 204) return undefined as T;
+    return res.json();
+  } catch (err) {
+    const duration = Math.round(performance.now() - start);
+    interceptor?.(method, url, undefined, duration, String(err));
+    throw err;
+  }
 }
 
 export const api = {
