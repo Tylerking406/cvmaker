@@ -114,14 +114,26 @@ export default function CvPreviewPage() {
               )}
 
               {/* Contact line */}
-              <p className="mt-2 text-[9pt] text-zinc-600 flex flex-wrap gap-x-3 gap-y-0.5">
-                {info.email && <span>{info.email}</span>}
-                {info.phone && <span>{info.phone}</span>}
-                {info.location && <span>{info.location}</span>}
-                {info.linkedIn && <span>{info.linkedIn}</span>}
-                {info.gitHub && <span>{info.gitHub}</span>}
-                {info.website && <span>{info.website}</span>}
-              </p>
+              {(() => {
+                const contacts = [
+                  info.email,
+                  info.phone,
+                  info.location,
+                  info.linkedIn,
+                  info.gitHub,
+                  info.website,
+                ].filter(Boolean) as string[];
+                return contacts.length > 0 ? (
+                  <p className="mt-2 text-[9pt] text-zinc-600">
+                    {contacts.map((c, i) => (
+                      <span key={i}>
+                        {i > 0 && <span className="mx-1.5 text-zinc-300">·</span>}
+                        {c}
+                      </span>
+                    ))}
+                  </p>
+                ) : null;
+              })()}
 
               {info.summary && (
                 <p className="mt-3 text-[10pt] text-zinc-700 leading-relaxed">{info.summary}</p>
