@@ -207,6 +207,62 @@ function PersonalInfoSection({ info, setInfo, onSave, saving }: {
   );
 }
 
+// ── Inline bullet editor (reused in add forms and existing cards) ──────────────────
+
+function BulletEditor({
+  label = "Bullet Points",
+  placeholder = "Describe what you did or achieved...",
+  bullets,
+  onAdd,
+  onRemove,
+}: {
+  label?: string;
+  placeholder?: string;
+  bullets: string[];
+  onAdd: (text: string) => void;
+  onRemove: (index: number) => void;
+}) {
+  const [draft, setDraft] = useState("");
+
+  function submit() {
+    if (!draft.trim()) return;
+    onAdd(draft.trim());
+    setDraft("");
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+      {bullets.map((b, i) => (
+        <div key={i} className="flex items-start gap-2 text-sm">
+          <span className="text-muted-foreground mt-0.5">•</span>
+          <span className="flex-1 text-foreground">{b}</span>
+          <Button
+            variant="ghost" size="icon"
+            className="h-5 w-5 text-muted-foreground hover:text-destructive shrink-0"
+            onClick={() => onRemove(i)}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      ))}
+      <div className="flex gap-2">
+        <Input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && submit()}
+          placeholder={placeholder}
+          className="text-sm h-8"
+        />
+        <Button size="sm" className="h-8 gap-1" disabled={!draft.trim()} onClick={submit}>
+          <Plus className="h-3 w-3" />
+          Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ── Work Experience ───────────────────────────────────────────────────────────
 
 function ExperienceSection({ cvId, experiences, setExperiences }: {
@@ -216,9 +272,8 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
 }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ company: "", role: "", location: "", startDate: "", endDate: "" });
+  const [newBullets, setNewBullets] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [bulletDraft, setBulletDraft] = useState("");
-  const [savingBullet, setSavingBullet] = useState(false);
 
   async function add() {
     setAdding(true);
@@ -230,11 +285,12 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
         startDate: form.startDate,
         endDate: form.endDate || undefined,
         isCurrent: !form.endDate,
-        bullets: [],
+        bullets: newBullets,
         orderIndex: experiences.length,
       });
       setExperiences([...experiences, exp]);
       setForm({ company: "", role: "", location: "", startDate: "", endDate: "" });
+      setNewBullets([]);
     } finally {
       setAdding(false);
     }
@@ -246,26 +302,8 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
     if (expanded === id) setExpanded(null);
   }
 
-  async function addBullet(exp: WorkExperience) {
-    if (!bulletDraft.trim()) return;
-    setSavingBullet(true);
-    try {
-      const updated = await api.workExperience.update(cvId, exp.id, {
-        ...exp,
-        bullets: [...exp.bullets, bulletDraft.trim()],
-      });
-      setExperiences(experiences.map(e => e.id === exp.id ? updated : e));
-      setBulletDraft("");
-    } finally {
-      setSavingBullet(false);
-    }
-  }
-
-  async function removeBullet(exp: WorkExperience, index: number) {
-    const updated = await api.workExperience.update(cvId, exp.id, {
-      ...exp,
-      bullets: exp.bullets.filter((_, i) => i !== index),
-    });
+  async function updateBullets(exp: WorkExperience, bullets: string[]) {
+    const updated = await api.workExperience.update(cvId, exp.id, { ...exp, bullets });
     setExperiences(experiences.map(e => e.id === exp.id ? updated : e));
   }
 
@@ -289,7 +327,7 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
                 <Button
                   variant="ghost" size="icon"
                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  onClick={() => { setExpanded(expanded === exp.id ? null : exp.id); setBulletDraft(""); }}
+                  onClick={() => setExpanded(expanded === exp.id ? null : exp.id)}
                 >
                   {expanded === exp.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </Button>
@@ -300,34 +338,12 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
             </div>
 
             {expanded === exp.id && (
-              <div className="border-t border-border/50 pt-3 space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Bullet Points</p>
-                {exp.bullets.map((b, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm">
-                    <span className="text-muted-foreground mt-0.5">•</span>
-                    <span className="flex-1 text-foreground">{b}</span>
-                    <Button
-                      variant="ghost" size="icon"
-                      className="h-5 w-5 text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => removeBullet(exp, i)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-                <div className="flex gap-2 pt-1">
-                  <Input
-                    value={bulletDraft}
-                    onChange={e => setBulletDraft(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && addBullet(exp)}
-                    placeholder="Describe what you did or achieved..."
-                    className="text-sm h-8"
-                  />
-                  <Button size="sm" className="h-8 gap-1" disabled={savingBullet || !bulletDraft.trim()} onClick={() => addBullet(exp)}>
-                    {savingBullet ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                    Add
-                  </Button>
-                </div>
+              <div className="border-t border-border/50 pt-3">
+                <BulletEditor
+                  bullets={exp.bullets}
+                  onAdd={text => updateBullets(exp, [...exp.bullets, text])}
+                  onRemove={i => updateBullets(exp, exp.bullets.filter((_, idx) => idx !== i))}
+                />
               </div>
             )}
           </CardContent>
@@ -335,7 +351,7 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
       ))}
 
       <Card className="border-dashed">
-        <CardContent className="pt-4 space-y-3">
+        <CardContent className="pt-4 space-y-4">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Entry</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Company"><Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} placeholder="Acme Corp" /></Field>
@@ -344,6 +360,13 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
             <div />
             <Field label="Start Date"><Input value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} placeholder="2022-01-01" /></Field>
             <Field label="End Date"><Input value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} placeholder="Leave blank if current" /></Field>
+          </div>
+          <div className="border-t border-border/40 pt-3">
+            <BulletEditor
+              bullets={newBullets}
+              onAdd={text => setNewBullets(b => [...b, text])}
+              onRemove={i => setNewBullets(b => b.filter((_, idx) => idx !== i))}
+            />
           </div>
           <div className="flex justify-end">
             <Button size="sm" onClick={add} disabled={adding || !form.company || !form.role || !form.startDate} className="gap-1.5">
@@ -366,6 +389,8 @@ function EducationSection({ cvId, educations, setEducations }: {
 }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ institution: "", degree: "", field: "", startDate: "", endDate: "" });
+  const [newAchievements, setNewAchievements] = useState<string[]>([]);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   async function add() {
     setAdding(true);
@@ -377,11 +402,12 @@ function EducationSection({ cvId, educations, setEducations }: {
         startDate: form.startDate,
         endDate: form.endDate || undefined,
         isCurrent: !form.endDate,
-        achievements: [],
+        achievements: newAchievements,
         orderIndex: educations.length,
       });
       setEducations([...educations, edu]);
       setForm({ institution: "", degree: "", field: "", startDate: "", endDate: "" });
+      setNewAchievements([]);
     } finally {
       setAdding(false);
     }
@@ -390,6 +416,12 @@ function EducationSection({ cvId, educations, setEducations }: {
   async function remove(id: string) {
     await api.education.delete(cvId, id).catch(() => null);
     setEducations(educations.filter((e) => e.id !== id));
+    if (expanded === id) setExpanded(null);
+  }
+
+  async function updateAchievements(edu: Education, achievements: string[]) {
+    const updated = await api.education.update(cvId, edu.id, { ...edu, achievements });
+    setEducations(educations.map(e => e.id === edu.id ? updated : e));
   }
 
   return (
@@ -400,20 +432,43 @@ function EducationSection({ cvId, educations, setEducations }: {
 
       {educations.map((edu) => (
         <Card key={edu.id}>
-          <CardContent className="pt-4 flex items-start justify-between gap-4">
-            <div>
-              <p className="font-medium text-sm">{edu.degree} in {edu.field}</p>
-              <p className="text-xs text-muted-foreground">{edu.institution} · {edu.startDate} – {edu.isCurrent ? "Present" : edu.endDate}</p>
+          <CardContent className="pt-4 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="font-medium text-sm">{edu.degree} in {edu.field}</p>
+                <p className="text-xs text-muted-foreground">{edu.institution} · {edu.startDate} – {edu.isCurrent ? "Present" : edu.endDate}</p>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost" size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={() => setExpanded(expanded === edu.id ? null : edu.id)}
+                >
+                  {expanded === edu.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(edu.id)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(edu.id)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+
+            {expanded === edu.id && (
+              <div className="border-t border-border/50 pt-3">
+                <BulletEditor
+                  label="Achievements / Notes"
+                  placeholder="e.g. Dean's list, relevant coursework..."
+                  bullets={edu.achievements}
+                  onAdd={text => updateAchievements(edu, [...edu.achievements, text])}
+                  onRemove={i => updateAchievements(edu, edu.achievements.filter((_, idx) => idx !== i))}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       ))}
 
       <Card className="border-dashed">
-        <CardContent className="pt-4 space-y-3">
+        <CardContent className="pt-4 space-y-4">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Entry</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Institution" className="col-span-2"><Input value={form.institution} onChange={e => setForm(f => ({ ...f, institution: e.target.value }))} placeholder="University of Cape Town" /></Field>
@@ -421,6 +476,15 @@ function EducationSection({ cvId, educations, setEducations }: {
             <Field label="Field"><Input value={form.field} onChange={e => setForm(f => ({ ...f, field: e.target.value }))} placeholder="Computer Science" /></Field>
             <Field label="Start Date"><Input value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} placeholder="2018-02-01" /></Field>
             <Field label="End Date"><Input value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} placeholder="Leave blank if current" /></Field>
+          </div>
+          <div className="border-t border-border/40 pt-3">
+            <BulletEditor
+              label="Achievements / Notes"
+              placeholder="e.g. Dean's list, relevant coursework..."
+              bullets={newAchievements}
+              onAdd={text => setNewAchievements(a => [...a, text])}
+              onRemove={i => setNewAchievements(a => a.filter((_, idx) => idx !== i))}
+            />
           </div>
           <div className="flex justify-end">
             <Button size="sm" onClick={add} disabled={adding || !form.institution || !form.startDate} className="gap-1.5">
@@ -510,9 +574,8 @@ function ProjectsSection({ cvId, projects, setProjects }: {
 }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", url: "" });
+  const [newBullets, setNewBullets] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [bulletDraft, setBulletDraft] = useState("");
-  const [savingBullet, setSavingBullet] = useState(false);
 
   async function add() {
     setAdding(true);
@@ -521,11 +584,12 @@ function ProjectsSection({ cvId, projects, setProjects }: {
         name: form.name,
         description: form.description || undefined,
         url: form.url || undefined,
-        bullets: [],
+        bullets: newBullets,
         orderIndex: projects.length,
       });
       setProjects([...projects, proj]);
       setForm({ name: "", description: "", url: "" });
+      setNewBullets([]);
     } finally {
       setAdding(false);
     }
@@ -537,26 +601,8 @@ function ProjectsSection({ cvId, projects, setProjects }: {
     if (expanded === id) setExpanded(null);
   }
 
-  async function addBullet(proj: Project) {
-    if (!bulletDraft.trim()) return;
-    setSavingBullet(true);
-    try {
-      const updated = await api.projects.update(cvId, proj.id, {
-        ...proj,
-        bullets: [...proj.bullets, bulletDraft.trim()],
-      });
-      setProjects(projects.map(p => p.id === proj.id ? updated : p));
-      setBulletDraft("");
-    } finally {
-      setSavingBullet(false);
-    }
-  }
-
-  async function removeBullet(proj: Project, index: number) {
-    const updated = await api.projects.update(cvId, proj.id, {
-      ...proj,
-      bullets: proj.bullets.filter((_, i) => i !== index),
-    });
+  async function updateBullets(proj: Project, bullets: string[]) {
+    const updated = await api.projects.update(cvId, proj.id, { ...proj, bullets });
     setProjects(projects.map(p => p.id === proj.id ? updated : p));
   }
 
@@ -579,7 +625,7 @@ function ProjectsSection({ cvId, projects, setProjects }: {
                 <Button
                   variant="ghost" size="icon"
                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  onClick={() => { setExpanded(expanded === proj.id ? null : proj.id); setBulletDraft(""); }}
+                  onClick={() => setExpanded(expanded === proj.id ? null : proj.id)}
                 >
                   {expanded === proj.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </Button>
@@ -590,34 +636,13 @@ function ProjectsSection({ cvId, projects, setProjects }: {
             </div>
 
             {expanded === proj.id && (
-              <div className="border-t border-border/50 pt-3 space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Bullet Points</p>
-                {proj.bullets.map((b, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm">
-                    <span className="text-muted-foreground mt-0.5">•</span>
-                    <span className="flex-1 text-foreground">{b}</span>
-                    <Button
-                      variant="ghost" size="icon"
-                      className="h-5 w-5 text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => removeBullet(proj, i)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-                <div className="flex gap-2 pt-1">
-                  <Input
-                    value={bulletDraft}
-                    onChange={e => setBulletDraft(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && addBullet(proj)}
-                    placeholder="Describe a feature or achievement..."
-                    className="text-sm h-8"
-                  />
-                  <Button size="sm" className="h-8 gap-1" disabled={savingBullet || !bulletDraft.trim()} onClick={() => addBullet(proj)}>
-                    {savingBullet ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                    Add
-                  </Button>
-                </div>
+              <div className="border-t border-border/50 pt-3">
+                <BulletEditor
+                  placeholder="Describe a feature or achievement..."
+                  bullets={proj.bullets}
+                  onAdd={text => updateBullets(proj, [...proj.bullets, text])}
+                  onRemove={i => updateBullets(proj, proj.bullets.filter((_, idx) => idx !== i))}
+                />
               </div>
             )}
           </CardContent>
@@ -625,11 +650,19 @@ function ProjectsSection({ cvId, projects, setProjects }: {
       ))}
 
       <Card className="border-dashed">
-        <CardContent className="pt-4 space-y-3">
+        <CardContent className="pt-4 space-y-4">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Project</p>
           <Field label="Project Name"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="My Awesome App" /></Field>
           <Field label="Description"><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Short description" /></Field>
           <Field label="URL"><Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="github.com/you/project" /></Field>
+          <div className="border-t border-border/40 pt-3">
+            <BulletEditor
+              placeholder="Describe a feature or achievement..."
+              bullets={newBullets}
+              onAdd={text => setNewBullets(b => [...b, text])}
+              onRemove={i => setNewBullets(b => b.filter((_, idx) => idx !== i))}
+            />
+          </div>
           <div className="flex justify-end">
             <Button size="sm" onClick={add} disabled={adding || !form.name} className="gap-1.5">
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
