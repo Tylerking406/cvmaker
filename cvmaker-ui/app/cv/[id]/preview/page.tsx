@@ -3,9 +3,21 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { api, type Cv, type PersonalInfo, type WorkExperience, type Education, type Skill, type Project, type Certification, type Achievement } from "@/lib/api";
+import {
+  api,
+  type Cv,
+  type PersonalInfo,
+  type WorkExperience,
+  type Education,
+  type Skill,
+  type Project,
+  type Certification,
+  type Achievement,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Printer, Loader2 } from "lucide-react";
+
+const TEAL = "#2B9EB3";
 
 interface CvData {
   cv: Cv;
@@ -25,11 +37,17 @@ function formatDate(d?: string | null): string {
   return `${months[parseInt(month) - 1]} ${year}`;
 }
 
-function DateRange({ start, end, current }: { start?: string | null; end?: string | null; current?: boolean }) {
-  const s = formatDate(start);
-  const e = current ? "Present" : formatDate(end);
-  if (!s && !e) return null;
-  return <span>{s}{e ? ` – ${e}` : ""}</span>;
+function yearOnly(d?: string | null): string {
+  return d ? d.split("-")[0] : "";
+}
+
+function Bullet({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex gap-2">
+      <span className="shrink-0 text-zinc-500">&middot;</span>
+      <span className="flex-1">{children}</span>
+    </div>
+  );
 }
 
 export default function CvPreviewPage() {
@@ -69,14 +87,6 @@ export default function CvPreviewPage() {
 
   const { cv, info, experience, education, skills, projects, certifications, achievements } = data;
 
-  const contactItems: { text: string; href?: string }[] = [];
-  if (info?.email) contactItems.push({ text: info.email, href: `mailto:${info.email}` });
-  if (info?.phone) contactItems.push({ text: info.phone });
-  if (info?.location) contactItems.push({ text: info.location });
-  if (info?.linkedIn) contactItems.push({ text: info.linkedIn, href: info.linkedIn.startsWith("http") ? info.linkedIn : `https://${info.linkedIn}` });
-  if (info?.gitHub) contactItems.push({ text: info.gitHub, href: info.gitHub.startsWith("http") ? info.gitHub : `https://${info.gitHub}` });
-  if (info?.website) contactItems.push({ text: info.website, href: info.website.startsWith("http") ? info.website : `https://${info.website}` });
-
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-zinc-900">
       {/* Toolbar */}
@@ -100,169 +110,198 @@ export default function CvPreviewPage() {
       <div className="py-8 px-4 print:p-0 print:py-0">
         <article
           id="cv-document"
-          className="
-            bg-white text-zinc-900
-            mx-auto max-w-[210mm]
-            px-[18mm] py-[14mm]
-            print:shadow-none print:mx-0 print:max-w-none
-            shadow-xl
-            font-sans text-[10.5pt] leading-[1.5]
-          "
+          className="bg-white text-zinc-900 mx-auto max-w-[210mm] px-[18mm] py-[14mm] print:shadow-none print:mx-0 print:max-w-none shadow-xl font-serif text-[10.5pt] leading-[1.5]"
           style={{ minHeight: "297mm" }}
         >
-          {/* Header */}
+          {/* ── Header ── */}
           {info && (
-            <header className="mb-5">
-              <h1 className="text-[20pt] font-bold tracking-tight text-zinc-900 leading-tight">
+            <header>
+              <h1 className="text-center text-[22pt] font-bold leading-tight" style={{ color: TEAL }}>
                 {info.fullName}
               </h1>
-              {info.jobTitle && (
-                <p className="text-[11pt] text-zinc-700 mt-0.5 font-medium">{info.jobTitle}</p>
-              )}
 
-              {contactItems.length > 0 && (
-                <p className="mt-2 text-[9pt] text-zinc-600">
-                  {contactItems.map((c, i) => (
-                    <span key={i}>
-                      {i > 0 && <span className="mx-1.5 text-zinc-400">|</span>}
-                      {c.href ? (
-                        <a href={c.href} className="hover:underline text-zinc-600">{c.text}</a>
-                      ) : (
-                        c.text
-                      )}
-                    </span>
-                  ))}
-                </p>
-              )}
+              {/* 2-column contact row */}
+              <div className="grid grid-cols-2 gap-x-8 mt-2 text-[9.5pt]">
+                <div className="space-y-0.5">
+                  {info.phone && (
+                    <p><span className="font-semibold">Cellphone Number:</span> {info.phone}</p>
+                  )}
+                  {info.gitHub && (
+                    <p>
+                      <span className="font-semibold">Github:</span>{" "}
+                      <a
+                        href={info.gitHub.startsWith("http") ? info.gitHub : `https://${info.gitHub}`}
+                        style={{ color: TEAL }}
+                      >
+                        {info.gitHub}
+                      </a>
+                    </p>
+                  )}
+                  {info.website && (
+                    <p>
+                      <span className="font-semibold">Website:</span>{" "}
+                      <a
+                        href={info.website.startsWith("http") ? info.website : `https://${info.website}`}
+                        style={{ color: TEAL }}
+                      >
+                        {info.website}
+                      </a>
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-0.5">
+                  {info.email && (
+                    <p>
+                      <span className="font-semibold">Email:</span>{" "}
+                      <a href={`mailto:${info.email}`} style={{ color: TEAL }}>{info.email}</a>
+                    </p>
+                  )}
+                  {info.linkedIn && (
+                    <p>
+                      <span className="font-semibold">LinkedIn:</span>{" "}
+                      <a
+                        href={info.linkedIn.startsWith("http") ? info.linkedIn : `https://${info.linkedIn}`}
+                        style={{ color: TEAL }}
+                      >
+                        {info.linkedIn}
+                      </a>
+                    </p>
+                  )}
+                  {info.location && (
+                    <p><span className="font-semibold">Location:</span> {info.location}</p>
+                  )}
+                </div>
+              </div>
 
-              {info.summary && (
-                <p className="mt-3 text-[10pt] text-zinc-800 leading-relaxed">{info.summary}</p>
-              )}
+              {/* Teal rule */}
+              <hr className="mt-3 mb-0" style={{ borderColor: TEAL, borderTopWidth: "1.5px" }} />
             </header>
           )}
 
-          {/* Experience */}
+          {/* ── Summary ── */}
+          {info?.summary && (
+            <Section title="Summary">
+              <p className="text-[10pt] leading-relaxed mt-1">{info.summary}</p>
+            </Section>
+          )}
+
+          {/* ── Experience ── */}
           {experience.length > 0 && (
             <Section title="Experience">
-              {experience.map((exp, i) => (
-                <div key={exp.id} className={i > 0 ? "mt-3.5" : ""}>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-bold text-zinc-900">{exp.role}</span>
-                    <span className="text-[9pt] text-zinc-600 shrink-0">
-                      <DateRange start={exp.startDate} end={exp.endDate} current={exp.isCurrent} />
-                    </span>
+              {experience.map((exp, i) => {
+                const start = formatDate(exp.startDate);
+                const end = exp.isCurrent ? "Present" : formatDate(exp.endDate);
+                const dateStr = start && end ? `${start} – ${end}` : start || end;
+                return (
+                  <div key={exp.id} className={i > 0 ? "mt-3" : ""}>
+                    <p className="font-bold">
+                      {dateStr}{" | "}{exp.role}{" | "}{exp.company}{exp.location ? `, ${exp.location}` : ""}
+                    </p>
+                    {exp.bullets.length > 0 && (
+                      <div className="mt-1 space-y-0.5">
+                        {exp.bullets.map((b, j) => (
+                          <Bullet key={j}>{b}</Bullet>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-[9.5pt] text-zinc-700 font-medium">
-                    {exp.company}{exp.location ? `, ${exp.location}` : ""}
-                  </div>
-                  {exp.bullets.length > 0 && (
-                    <ul className="mt-1 ml-4 space-y-0.5 list-disc marker:text-zinc-500">
-                      {exp.bullets.map((b, j) => (
-                        <li key={j} className="text-zinc-800">{b}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </Section>
           )}
 
-          {/* Education */}
+          {/* ── Education ── */}
           {education.length > 0 && (
             <Section title="Education">
-              {education.map((edu, i) => (
-                <div key={edu.id} className={i > 0 ? "mt-3.5" : ""}>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-bold text-zinc-900">
-                      {edu.degree}{edu.field ? ` in ${edu.field}` : ""}
-                    </span>
-                    <span className="text-[9pt] text-zinc-600 shrink-0">
-                      <DateRange start={edu.startDate} end={edu.endDate} current={edu.isCurrent} />
-                    </span>
+              {education.map((edu, i) => {
+                const startY = yearOnly(edu.startDate);
+                const endY = edu.isCurrent ? "Present" : yearOnly(edu.endDate);
+                const dateStr = startY && endY ? `${startY} - ${endY}` : startY || endY;
+                return (
+                  <div key={edu.id} className={i > 0 ? "mt-3" : ""}>
+                    <p className="font-bold">
+                      {dateStr}{" | "}{edu.degree}{edu.field ? ` in ${edu.field}` : ""}{" |"}{edu.institution}
+                    </p>
+                    {edu.achievements.length > 0 && (
+                      <div className="mt-1 space-y-0.5">
+                        {edu.achievements.map((a, j) => (
+                          <Bullet key={j}>{a}</Bullet>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-[9.5pt] text-zinc-700 font-medium">{edu.institution}</div>
-                  {edu.achievements.length > 0 && (
-                    <ul className="mt-1 ml-4 space-y-0.5 list-disc marker:text-zinc-500">
-                      {edu.achievements.map((a, j) => (
-                        <li key={j} className="text-zinc-800">{a}</li>
-                      ))}
-                    </ul>
-                  )}
+                );
+              })}
+            </Section>
+          )}
+
+          {/* ── Projects ── */}
+          {projects.length > 0 && (
+            <Section title="Projects">
+              {projects.map((p, i) => (
+                <div key={p.id} className={i > 0 ? "mt-3" : ""}>
+                  <p className="font-bold">{p.name}</p>
+                  <div className="mt-0.5 space-y-0.5">
+                    {p.description && <Bullet>{p.description}</Bullet>}
+                    {p.bullets.map((b, j) => (
+                      <Bullet key={j}>{b}</Bullet>
+                    ))}
+                    {p.url && (
+                      <Bullet>
+                        <a
+                          href={p.url.startsWith("http") ? p.url : `https://${p.url}`}
+                          style={{ color: TEAL }}
+                        >
+                          {p.url}
+                        </a>
+                      </Bullet>
+                    )}
+                  </div>
                 </div>
               ))}
             </Section>
           )}
 
-          {/* Skills */}
+          {/* ── Skills ── */}
           {skills.length > 0 && (
-            <Section title="Skills">
-              <div className="space-y-1">
+            <Section title="Technical Skills">
+              <div className="mt-1 space-y-0.5">
                 {skills.map((s) => (
-                  <div key={s.id} className="flex gap-2">
-                    <span className="font-semibold text-zinc-900 shrink-0">{s.category}:</span>
-                    <span className="text-zinc-800">{s.items.join(", ")}</span>
-                  </div>
+                  <Bullet key={s.id}>
+                    <span className="font-bold">{s.category}:</span>{" "}
+                    {s.items.join(", ")}
+                  </Bullet>
                 ))}
               </div>
             </Section>
           )}
 
-          {/* Projects */}
-          {projects.length > 0 && (
-            <Section title="Projects">
-              {projects.map((p, i) => (
-                <div key={p.id} className={i > 0 ? "mt-3.5" : ""}>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-bold text-zinc-900">{p.name}</span>
-                    {p.url && (
-                      <a
-                        href={p.url.startsWith("http") ? p.url : `https://${p.url}`}
-                        className="text-[9pt] text-zinc-600 shrink-0 hover:underline"
-                      >
-                        {p.url}
-                      </a>
-                    )}
-                  </div>
-                  {p.description && (
-                    <p className="text-[9.5pt] text-zinc-700 mt-0.5">{p.description}</p>
-                  )}
-                  {p.bullets.length > 0 && (
-                    <ul className="mt-1 ml-4 space-y-0.5 list-disc marker:text-zinc-500">
-                      {p.bullets.map((b, j) => (
-                        <li key={j} className="text-zinc-800">{b}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
-            </Section>
-          )}
-
-          {/* Certifications */}
+          {/* ── Certifications ── */}
           {certifications.length > 0 && (
             <Section title="Certifications">
-              {certifications.map((c, i) => (
-                <div key={c.id} className={`flex items-baseline justify-between gap-2 ${i > 0 ? "mt-1.5" : ""}`}>
-                  <span>
-                    <span className="font-semibold text-zinc-900">{c.name}</span>
-                    {c.issuer && <span className="text-zinc-700"> &mdash; {c.issuer}</span>}
-                  </span>
-                  {c.issueDate && (
-                    <span className="text-[9pt] text-zinc-600 shrink-0">{formatDate(c.issueDate)}</span>
-                  )}
-                </div>
-              ))}
+              <div className="mt-1 space-y-0.5">
+                {certifications.map((c) => (
+                  <Bullet key={c.id}>
+                    <span className="font-bold">{c.name}</span>
+                    {c.issuer && <span> — {c.issuer}</span>}
+                    {c.issueDate && <span className="text-zinc-600"> ({formatDate(c.issueDate)}{c.expiryDate ? ` – ${formatDate(c.expiryDate)}` : ""})</span>}
+                    {c.url && (
+                      <>{" "}<a href={c.url.startsWith("http") ? c.url : `https://${c.url}`} style={{ color: TEAL }}>{c.url}</a></>
+                    )}
+                  </Bullet>
+                ))}
+              </div>
             </Section>
           )}
 
-          {/* Achievements */}
+          {/* ── Achievements ── */}
           {achievements.length > 0 && (
             <Section title="Achievements">
-              <ul className="ml-4 space-y-0.5 list-disc marker:text-zinc-500">
+              <div className="mt-1 space-y-0.5">
                 {achievements.map((a) => (
-                  <li key={a.id} className="text-zinc-800">{a.description}</li>
+                  <Bullet key={a.id}>{a.description}</Bullet>
                 ))}
-              </ul>
+              </div>
             </Section>
           )}
         </article>
@@ -285,7 +324,10 @@ export default function CvPreviewPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-4">
-      <h2 className="text-[10pt] font-bold uppercase tracking-[0.1em] text-zinc-900 border-b-2 border-zinc-900 pb-0.5 mb-2">
+      <h2
+        className="text-[13pt] font-bold pb-0.5"
+        style={{ color: TEAL, borderBottom: `1.5px solid ${TEAL}` }}
+      >
         {title}
       </h2>
       {children}
