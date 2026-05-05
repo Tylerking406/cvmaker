@@ -20,7 +20,6 @@ interface CvData {
 
 function formatDate(d?: string | null): string {
   if (!d) return "";
-  // DateOnly comes as "YYYY-MM-DD"
   const [year, month] = d.split("-");
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   return `${months[parseInt(month) - 1]} ${year}`;
@@ -70,9 +69,17 @@ export default function CvPreviewPage() {
 
   const { cv, info, experience, education, skills, projects, certifications, achievements } = data;
 
+  const contactItems: { text: string; href?: string }[] = [];
+  if (info?.email) contactItems.push({ text: info.email, href: `mailto:${info.email}` });
+  if (info?.phone) contactItems.push({ text: info.phone });
+  if (info?.location) contactItems.push({ text: info.location });
+  if (info?.linkedIn) contactItems.push({ text: info.linkedIn, href: info.linkedIn.startsWith("http") ? info.linkedIn : `https://${info.linkedIn}` });
+  if (info?.gitHub) contactItems.push({ text: info.gitHub, href: info.gitHub.startsWith("http") ? info.gitHub : `https://${info.gitHub}` });
+  if (info?.website) contactItems.push({ text: info.website, href: info.website.startsWith("http") ? info.website : `https://${info.website}` });
+
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-zinc-900">
-      {/* Toolbar — hidden when printing */}
+      {/* Toolbar */}
       <div className="print:hidden sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border/50 px-6 py-3 flex items-center justify-between">
         <Link href={`/cv/${id}`}>
           <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
@@ -99,66 +106,59 @@ export default function CvPreviewPage() {
             px-[18mm] py-[14mm]
             print:shadow-none print:mx-0 print:max-w-none
             shadow-xl
-            font-serif text-[10.5pt] leading-[1.45]
+            font-sans text-[10.5pt] leading-[1.5]
           "
           style={{ minHeight: "297mm" }}
         >
-          {/* ── Header ── */}
+          {/* Header */}
           {info && (
-            <header className="mb-4">
-              <h1 className="text-[22pt] font-bold tracking-tight text-zinc-900 leading-tight">
+            <header className="mb-5">
+              <h1 className="text-[20pt] font-bold tracking-tight text-zinc-900 leading-tight">
                 {info.fullName}
               </h1>
               {info.jobTitle && (
-                <p className="text-[11pt] text-zinc-600 mt-0.5">{info.jobTitle}</p>
+                <p className="text-[11pt] text-zinc-700 mt-0.5 font-medium">{info.jobTitle}</p>
               )}
 
-              {/* Contact line */}
-              {(() => {
-                const contacts = [
-                  info.email,
-                  info.phone,
-                  info.location,
-                  info.linkedIn,
-                  info.gitHub,
-                  info.website,
-                ].filter(Boolean) as string[];
-                return contacts.length > 0 ? (
-                  <p className="mt-2 text-[9pt] text-zinc-600">
-                    {contacts.map((c, i) => (
-                      <span key={i}>
-                        {i > 0 && <span className="mx-1.5 text-zinc-300">·</span>}
-                        {c}
-                      </span>
-                    ))}
-                  </p>
-                ) : null;
-              })()}
+              {contactItems.length > 0 && (
+                <p className="mt-2 text-[9pt] text-zinc-600">
+                  {contactItems.map((c, i) => (
+                    <span key={i}>
+                      {i > 0 && <span className="mx-1.5 text-zinc-400">|</span>}
+                      {c.href ? (
+                        <a href={c.href} className="hover:underline text-zinc-600">{c.text}</a>
+                      ) : (
+                        c.text
+                      )}
+                    </span>
+                  ))}
+                </p>
+              )}
 
               {info.summary && (
-                <p className="mt-3 text-[10pt] text-zinc-700 leading-relaxed">{info.summary}</p>
+                <p className="mt-3 text-[10pt] text-zinc-800 leading-relaxed">{info.summary}</p>
               )}
             </header>
           )}
 
-          {/* ── Work Experience ── */}
+          {/* Experience */}
           {experience.length > 0 && (
             <Section title="Experience">
               {experience.map((exp, i) => (
-                <div key={exp.id} className={i > 0 ? "mt-3" : ""}>
+                <div key={exp.id} className={i > 0 ? "mt-3.5" : ""}>
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="font-bold text-zinc-900">{exp.role}</span>
-                    <span className="text-[9pt] text-zinc-500 shrink-0">
+                    <span className="text-[9pt] text-zinc-600 shrink-0">
                       <DateRange start={exp.startDate} end={exp.endDate} current={exp.isCurrent} />
                     </span>
                   </div>
-                  <div className="text-[9.5pt] text-zinc-600">
+                  <div className="text-[9.5pt] text-zinc-700 font-medium">
                     {exp.company}{exp.location ? `, ${exp.location}` : ""}
                   </div>
                   {exp.bullets.length > 0 && (
-                    <ul className="mt-1 ml-4 space-y-0.5 list-disc marker:text-zinc-400">
+                    <ul className="mt-1 ml-4 space-y-0.5 list-disc marker:text-zinc-500">
                       {exp.bullets.map((b, j) => (
-                        <li key={j} className="text-zinc-700">{b}</li>
+                        <li key={j} className="text-zinc-800">{b}</li>
                       ))}
                     </ul>
                   )}
@@ -167,24 +167,24 @@ export default function CvPreviewPage() {
             </Section>
           )}
 
-          {/* ── Education ── */}
+          {/* Education */}
           {education.length > 0 && (
             <Section title="Education">
               {education.map((edu, i) => (
-                <div key={edu.id} className={i > 0 ? "mt-3" : ""}>
+                <div key={edu.id} className={i > 0 ? "mt-3.5" : ""}>
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="font-bold text-zinc-900">
                       {edu.degree}{edu.field ? ` in ${edu.field}` : ""}
                     </span>
-                    <span className="text-[9pt] text-zinc-500 shrink-0">
+                    <span className="text-[9pt] text-zinc-600 shrink-0">
                       <DateRange start={edu.startDate} end={edu.endDate} current={edu.isCurrent} />
                     </span>
                   </div>
-                  <div className="text-[9.5pt] text-zinc-600">{edu.institution}</div>
+                  <div className="text-[9.5pt] text-zinc-700 font-medium">{edu.institution}</div>
                   {edu.achievements.length > 0 && (
-                    <ul className="mt-1 ml-4 space-y-0.5 list-disc marker:text-zinc-400">
+                    <ul className="mt-1 ml-4 space-y-0.5 list-disc marker:text-zinc-500">
                       {edu.achievements.map((a, j) => (
-                        <li key={j} className="text-zinc-700">{a}</li>
+                        <li key={j} className="text-zinc-800">{a}</li>
                       ))}
                     </ul>
                   )}
@@ -193,36 +193,43 @@ export default function CvPreviewPage() {
             </Section>
           )}
 
-          {/* ── Skills ── */}
+          {/* Skills */}
           {skills.length > 0 && (
             <Section title="Skills">
               <div className="space-y-1">
                 {skills.map((s) => (
                   <div key={s.id} className="flex gap-2">
-                    <span className="font-semibold text-zinc-800 shrink-0 w-32">{s.category}:</span>
-                    <span className="text-zinc-700">{s.items.join(", ")}</span>
+                    <span className="font-semibold text-zinc-900 shrink-0">{s.category}:</span>
+                    <span className="text-zinc-800">{s.items.join(", ")}</span>
                   </div>
                 ))}
               </div>
             </Section>
           )}
 
-          {/* ── Projects ── */}
+          {/* Projects */}
           {projects.length > 0 && (
             <Section title="Projects">
               {projects.map((p, i) => (
-                <div key={p.id} className={i > 0 ? "mt-3" : ""}>
+                <div key={p.id} className={i > 0 ? "mt-3.5" : ""}>
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="font-bold text-zinc-900">{p.name}</span>
-                    {p.url && <span className="text-[9pt] text-zinc-500 shrink-0">{p.url}</span>}
+                    {p.url && (
+                      <a
+                        href={p.url.startsWith("http") ? p.url : `https://${p.url}`}
+                        className="text-[9pt] text-zinc-600 shrink-0 hover:underline"
+                      >
+                        {p.url}
+                      </a>
+                    )}
                   </div>
                   {p.description && (
-                    <p className="text-[9.5pt] text-zinc-600 mt-0.5">{p.description}</p>
+                    <p className="text-[9.5pt] text-zinc-700 mt-0.5">{p.description}</p>
                   )}
                   {p.bullets.length > 0 && (
-                    <ul className="mt-1 ml-4 space-y-0.5 list-disc marker:text-zinc-400">
+                    <ul className="mt-1 ml-4 space-y-0.5 list-disc marker:text-zinc-500">
                       {p.bullets.map((b, j) => (
-                        <li key={j} className="text-zinc-700">{b}</li>
+                        <li key={j} className="text-zinc-800">{b}</li>
                       ))}
                     </ul>
                   )}
@@ -231,29 +238,29 @@ export default function CvPreviewPage() {
             </Section>
           )}
 
-          {/* ── Certifications ── */}
+          {/* Certifications */}
           {certifications.length > 0 && (
             <Section title="Certifications">
               {certifications.map((c, i) => (
                 <div key={c.id} className={`flex items-baseline justify-between gap-2 ${i > 0 ? "mt-1.5" : ""}`}>
                   <span>
                     <span className="font-semibold text-zinc-900">{c.name}</span>
-                    {c.issuer && <span className="text-zinc-600"> — {c.issuer}</span>}
+                    {c.issuer && <span className="text-zinc-700"> &mdash; {c.issuer}</span>}
                   </span>
                   {c.issueDate && (
-                    <span className="text-[9pt] text-zinc-500 shrink-0">{formatDate(c.issueDate)}</span>
+                    <span className="text-[9pt] text-zinc-600 shrink-0">{formatDate(c.issueDate)}</span>
                   )}
                 </div>
               ))}
             </Section>
           )}
 
-          {/* ── Achievements ── */}
+          {/* Achievements */}
           {achievements.length > 0 && (
             <Section title="Achievements">
-              <ul className="ml-4 space-y-0.5 list-disc marker:text-zinc-400">
+              <ul className="ml-4 space-y-0.5 list-disc marker:text-zinc-500">
                 {achievements.map((a) => (
-                  <li key={a.id} className="text-zinc-700">{a.description}</li>
+                  <li key={a.id} className="text-zinc-800">{a.description}</li>
                 ))}
               </ul>
             </Section>
@@ -261,7 +268,6 @@ export default function CvPreviewPage() {
         </article>
       </div>
 
-      {/* Print styles */}
       <style>{`
         @media print {
           body { background: white !important; }
@@ -279,7 +285,7 @@ export default function CvPreviewPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-4">
-      <h2 className="text-[10.5pt] font-bold uppercase tracking-[0.12em] text-zinc-900 border-b border-zinc-300 pb-0.5 mb-2">
+      <h2 className="text-[10pt] font-bold uppercase tracking-[0.1em] text-zinc-900 border-b-2 border-zinc-900 pb-0.5 mb-2">
         {title}
       </h2>
       {children}
