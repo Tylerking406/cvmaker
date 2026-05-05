@@ -25,7 +25,7 @@ DB_PASS=""   # leave blank to be prompted
 # ─────────────────────────────────────────
 if [ -z "$DB_PASS" ]; then
   prompt "Enter a password for the local PostgreSQL user '$DB_USER':"
-  read -s DB_PASS
+  read -s DB_PASS < /dev/tty
   echo
   [ -z "$DB_PASS" ] && error "Password cannot be empty."
 fi
