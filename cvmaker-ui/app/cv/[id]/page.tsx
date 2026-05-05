@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   FileText, ChevronLeft, User, Briefcase, GraduationCap,
-  Wrench, FolderOpen, Award, Trophy, Loader2, Plus, Trash2, Save,
+  Wrench, FolderOpen, Award, Trophy, Loader2, Plus, Trash2, Save, Eye,
 } from "lucide-react";
 
 type Section = "personal" | "experience" | "education" | "skills" | "projects" | "certifications" | "achievements";
@@ -94,10 +94,16 @@ export default function CvEditorPage() {
           </Button>
         </Link>
         <Separator orientation="vertical" className="h-5" />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-1">
           <FileText className="h-4 w-4 text-primary" />
           <span className="font-medium text-sm text-foreground">{cv?.title}</span>
         </div>
+        <Link href={`/cv/${id}/preview`}>
+          <Button size="sm" variant="outline" className="gap-1.5">
+            <Eye className="h-4 w-4" />
+            Preview
+          </Button>
+        </Link>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
