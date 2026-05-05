@@ -6,7 +6,7 @@ import { api, type Cv } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Plus, Trash2, ArrowRight, Loader2 } from "lucide-react";
+import { FileText, Plus, Trash2, ArrowRight, Loader2, Eye } from "lucide-react";
 
 const DEV_USER_EMAIL = "dev@cvmaker.local";
 const DEV_USER_ID_KEY = "cvmaker_dev_user_id";
@@ -126,21 +126,29 @@ export default function DashboardPage() {
 
             {cvs.map((cv) => (
               <Card key={cv.id} className="flex flex-col hover:border-primary/30 transition-colors">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-base line-clamp-2">{cv.title}</CardTitle>
-                    <Badge variant="secondary" className="shrink-0 text-xs">Draft</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-1 pb-3">
-                  <p className="text-xs text-muted-foreground">
-                    Created {new Date(cv.createdAt).toLocaleDateString()}
-                  </p>
-                </CardContent>
+                <Link href={`/cv/${cv.id}`} className="flex-1 flex flex-col">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="text-base line-clamp-2">{cv.title}</CardTitle>
+                      <Badge variant="secondary" className="shrink-0 text-xs">Draft</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex-1 pb-3">
+                    <p className="text-xs text-muted-foreground">
+                      Created {new Date(cv.createdAt).toLocaleDateString()}
+                    </p>
+                  </CardContent>
+                </Link>
                 <CardFooter className="gap-2 pt-0">
                   <Link href={`/cv/${cv.id}`} className="flex-1">
                     <Button variant="default" size="sm" className="w-full gap-1.5">
                       Edit <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </Link>
+                  <Link href={`/cv/${cv.id}/preview`}>
+                    <Button variant="outline" size="sm" className="gap-1.5">
+                      <Eye className="h-3.5 w-3.5" />
+                      Preview
                     </Button>
                   </Link>
                   <Button
