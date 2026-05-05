@@ -30,100 +30,110 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  users: {
+    list: () => request<{ id: string; email: string }[]>("/users"),
+    create: (email: string) =>
+      request<{ id: string; email: string }>("/users", {
+        method: "POST",
+        body: JSON.stringify(email),
+      }),
+  },
   cvs: {
-    list: () => request<Cv[]>("/cvs"),
+    list: (userId: string) => request<Cv[]>(`/cvs?userId=${userId}`),
     get: (id: string) => request<Cv>(`/cvs/${id}`),
     create: (data: CreateCvRequest) =>
       request<Cv>("/cvs", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: { title: string; template: string }) =>
+      request<Cv>(`/cvs/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/cvs/${id}`, { method: "DELETE" }),
   },
   personalInfo: {
-    get: (cvId: string) => request<PersonalInfo>(`/personal-info/${cvId}`),
+    get: (cvId: string) => request<PersonalInfo>(`/cvs/${cvId}/personal-info`),
     upsert: (cvId: string, data: Partial<PersonalInfo>) =>
-      request<PersonalInfo>(`/personal-info/${cvId}`, {
+      request<PersonalInfo>(`/cvs/${cvId}/personal-info`, {
         method: "PUT",
         body: JSON.stringify(data),
       }),
   },
   workExperience: {
-    list: (cvId: string) => request<WorkExperience[]>(`/work-experience/${cvId}`),
+    list: (cvId: string) => request<WorkExperience[]>(`/cvs/${cvId}/work-experience`),
     create: (cvId: string, data: Partial<WorkExperience>) =>
-      request<WorkExperience>(`/work-experience/${cvId}`, {
+      request<WorkExperience>(`/cvs/${cvId}/work-experience`, {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    update: (id: string, data: Partial<WorkExperience>) =>
-      request<WorkExperience>(`/work-experience/item/${id}`, {
+    update: (cvId: string, id: string, data: Partial<WorkExperience>) =>
+      request<WorkExperience>(`/cvs/${cvId}/work-experience/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),
       }),
-    delete: (id: string) =>
-      request<void>(`/work-experience/item/${id}`, { method: "DELETE" }),
+    delete: (cvId: string, id: string) =>
+      request<void>(`/cvs/${cvId}/work-experience/${id}`, { method: "DELETE" }),
   },
   education: {
-    list: (cvId: string) => request<Education[]>(`/education/${cvId}`),
+    list: (cvId: string) => request<Education[]>(`/cvs/${cvId}/education`),
     create: (cvId: string, data: Partial<Education>) =>
-      request<Education>(`/education/${cvId}`, {
+      request<Education>(`/cvs/${cvId}/education`, {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    update: (id: string, data: Partial<Education>) =>
-      request<Education>(`/education/item/${id}`, {
+    update: (cvId: string, id: string, data: Partial<Education>) =>
+      request<Education>(`/cvs/${cvId}/education/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),
       }),
-    delete: (id: string) =>
-      request<void>(`/education/item/${id}`, { method: "DELETE" }),
+    delete: (cvId: string, id: string) =>
+      request<void>(`/cvs/${cvId}/education/${id}`, { method: "DELETE" }),
   },
   skills: {
-    list: (cvId: string) => request<Skill[]>(`/skills/${cvId}`),
+    list: (cvId: string) => request<Skill[]>(`/cvs/${cvId}/skills`),
     create: (cvId: string, data: Partial<Skill>) =>
-      request<Skill>(`/skills/${cvId}`, {
+      request<Skill>(`/cvs/${cvId}/skills`, {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    update: (id: string, data: Partial<Skill>) =>
-      request<Skill>(`/skills/item/${id}`, {
+    update: (cvId: string, id: string, data: Partial<Skill>) =>
+      request<Skill>(`/cvs/${cvId}/skills/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),
       }),
-    delete: (id: string) =>
-      request<void>(`/skills/item/${id}`, { method: "DELETE" }),
+    delete: (cvId: string, id: string) =>
+      request<void>(`/cvs/${cvId}/skills/${id}`, { method: "DELETE" }),
   },
   projects: {
-    list: (cvId: string) => request<Project[]>(`/projects/${cvId}`),
+    list: (cvId: string) => request<Project[]>(`/cvs/${cvId}/projects`),
     create: (cvId: string, data: Partial<Project>) =>
-      request<Project>(`/projects/${cvId}`, {
+      request<Project>(`/cvs/${cvId}/projects`, {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    update: (id: string, data: Partial<Project>) =>
-      request<Project>(`/projects/item/${id}`, {
+    update: (cvId: string, id: string, data: Partial<Project>) =>
+      request<Project>(`/cvs/${cvId}/projects/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),
       }),
-    delete: (id: string) =>
-      request<void>(`/projects/item/${id}`, { method: "DELETE" }),
+    delete: (cvId: string, id: string) =>
+      request<void>(`/cvs/${cvId}/projects/${id}`, { method: "DELETE" }),
   },
   certifications: {
-    list: (cvId: string) => request<Certification[]>(`/certifications/${cvId}`),
+    list: (cvId: string) => request<Certification[]>(`/cvs/${cvId}/certifications`),
     create: (cvId: string, data: Partial<Certification>) =>
-      request<Certification>(`/certifications/${cvId}`, {
+      request<Certification>(`/cvs/${cvId}/certifications`, {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    delete: (id: string) =>
-      request<void>(`/certifications/item/${id}`, { method: "DELETE" }),
+    delete: (cvId: string, id: string) =>
+      request<void>(`/cvs/${cvId}/certifications/${id}`, { method: "DELETE" }),
   },
   achievements: {
-    list: (cvId: string) => request<Achievement[]>(`/achievements/${cvId}`),
+    list: (cvId: string) => request<Achievement[]>(`/cvs/${cvId}/achievements`),
     create: (cvId: string, data: Partial<Achievement>) =>
-      request<Achievement>(`/achievements/${cvId}`, {
+      request<Achievement>(`/cvs/${cvId}/achievements`, {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    delete: (id: string) =>
-      request<void>(`/achievements/item/${id}`, { method: "DELETE" }),
+    delete: (cvId: string, id: string) =>
+      request<void>(`/cvs/${cvId}/achievements/${id}`, { method: "DELETE" }),
   },
 };
 
@@ -133,26 +143,28 @@ export interface Cv {
   id: string;
   userId: string;
   title: string;
+  template: string;
   createdAt: string;
   updatedAt: string;
-  personalInfo?: PersonalInfo;
 }
 
 export interface CreateCvRequest {
   userId: string;
   title: string;
+  template?: string;
 }
 
 export interface PersonalInfo {
   id: string;
   cvId: string;
   fullName: string;
-  email: string;
+  jobTitle?: string;
+  email?: string;
   phone?: string;
   location?: string;
   summary?: string;
-  linkedin?: string;
-  github?: string;
+  linkedIn?: string;
+  gitHub?: string;
   website?: string;
 }
 
@@ -161,10 +173,12 @@ export interface WorkExperience {
   cvId: string;
   company: string;
   role: string;
+  location?: string;
   startDate: string;
   endDate?: string;
-  current: boolean;
+  isCurrent: boolean;
   bullets: string[];
+  orderIndex: number;
 }
 
 export interface Education {
@@ -175,7 +189,9 @@ export interface Education {
   field: string;
   startDate: string;
   endDate?: string;
+  isCurrent: boolean;
   achievements: string[];
+  orderIndex: number;
 }
 
 export interface Skill {
@@ -183,6 +199,7 @@ export interface Skill {
   cvId: string;
   category: string;
   items: string[];
+  orderIndex: number;
 }
 
 export interface Project {
@@ -192,6 +209,7 @@ export interface Project {
   description?: string;
   url?: string;
   bullets: string[];
+  orderIndex: number;
 }
 
 export interface Certification {
@@ -199,15 +217,15 @@ export interface Certification {
   cvId: string;
   name: string;
   issuer: string;
-  issuedAt: string;
-  expiresAt?: string;
-  credentialUrl?: string;
+  issueDate: string;
+  expiryDate?: string;
+  url?: string;
+  orderIndex: number;
 }
 
 export interface Achievement {
   id: string;
   cvId: string;
-  title: string;
-  description?: string;
-  date?: string;
+  description: string;
+  orderIndex: number;
 }

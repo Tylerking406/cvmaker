@@ -8,29 +8,48 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { FileText, Plus, Trash2, ArrowRight, Loader2 } from "lucide-react";
 
-const DEV_USER_ID = "00000000-0000-0000-0000-000000000001";
+const DEV_USER_EMAIL = "dev@cvmaker.local";
+const DEV_USER_ID_KEY = "cvmaker_dev_user_id";
+
+async function getOrCreateDevUser(): Promise<string> {
+  const cached = localStorage.getItem(DEV_USER_ID_KEY);
+  if (cached) return cached;
+
+  const users = await api.users.list();
+  const existing = users.find((u) => u.email === DEV_USER_EMAIL);
+  if (existing) {
+    localStorage.setItem(DEV_USER_ID_KEY, existing.id);
+    return existing.id;
+  }
+
+  const created = await api.users.create(DEV_USER_EMAIL);
+  localStorage.setItem(DEV_USER_ID_KEY, created.id);
+  return created.id;
+}
 
 export default function DashboardPage() {
+  const [userId, setUserId] = useState<string | null>(null);
   const [cvs, setCvs] = useState<Cv[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.cvs
-      .list()
+    getOrCreateDevUser()
+      .then((uid) => {
+        setUserId(uid);
+        return api.cvs.list(uid);
+      })
       .then(setCvs)
-      .catch(() => setError("Could not load CVs — is the API running?"))
+      .catch(() => setError("Could not reach the API — is it running on port 5133?"))
       .finally(() => setLoading(false));
   }, []);
 
   async function createCv() {
+    if (!userId) return;
     setCreating(true);
     try {
-      const cv = await api.cvs.create({
-        userId: DEV_USER_ID,
-        title: `My CV ${cvs.length + 1}`,
-      });
+      const cv = await api.cvs.create({ userId, title: `My CV ${cvs.length + 1}` });
       setCvs((prev) => [cv, ...prev]);
     } catch {
       setError("Failed to create CV.");
@@ -46,7 +65,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b border-border/50 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center">
@@ -56,7 +74,7 @@ export default function DashboardPage() {
             CvMaker
           </Link>
         </div>
-        <Button onClick={createCv} disabled={creating} size="sm" className="gap-2">
+        <Button onClick={createCv} disabled={creating || !userId} size="sm" className="gap-2">
           {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           New CV
         </Button>
@@ -82,7 +100,6 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* New CV card */}
             <button
               onClick={createCv}
               disabled={creating}
@@ -110,8 +127,7 @@ export default function DashboardPage() {
                 <CardFooter className="gap-2 pt-0">
                   <Link href={`/cv/${cv.id}`} className="flex-1">
                     <Button variant="default" size="sm" className="w-full gap-1.5">
-                      Edit
-                      <ArrowRight className="h-3.5 w-3.5" />
+                      Edit <ArrowRight className="h-3.5 w-3.5" />
                     </Button>
                   </Link>
                   <Button

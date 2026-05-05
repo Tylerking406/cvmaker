@@ -33,17 +33,11 @@ export default function CvEditorPage() {
   const [section, setSection] = useState<Section>("personal");
   const [loading, setLoading] = useState(true);
 
-  // Personal info state
   const [info, setInfo] = useState<Partial<PersonalInfo>>({});
   const [savingInfo, setSavingInfo] = useState(false);
 
-  // Work experience state
   const [experiences, setExperiences] = useState<WorkExperience[]>([]);
-
-  // Education state
   const [educations, setEducations] = useState<Education[]>([]);
-
-  // Skills state
   const [skills, setSkills] = useState<Skill[]>([]);
 
   useEffect(() => {
@@ -65,7 +59,17 @@ export default function CvEditorPage() {
   async function savePersonalInfo() {
     setSavingInfo(true);
     try {
-      const saved = await api.personalInfo.upsert(id, info);
+      const saved = await api.personalInfo.upsert(id, {
+        fullName: info.fullName ?? "",
+        jobTitle: info.jobTitle,
+        email: info.email,
+        phone: info.phone,
+        location: info.location,
+        linkedIn: info.linkedIn,
+        gitHub: info.gitHub,
+        website: info.website,
+        summary: info.summary,
+      });
       setInfo(saved);
     } finally {
       setSavingInfo(false);
@@ -82,7 +86,6 @@ export default function CvEditorPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
       <header className="border-b border-border/50 px-6 py-3 flex items-center gap-4">
         <Link href="/dashboard">
           <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
@@ -98,7 +101,6 @@ export default function CvEditorPage() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
         <aside className="w-56 border-r border-border/50 p-4 flex flex-col gap-1">
           {NAV_ITEMS.map(({ id: sid, label, icon: Icon }) => (
             <button
@@ -116,7 +118,6 @@ export default function CvEditorPage() {
           ))}
         </aside>
 
-        {/* Content */}
         <main className="flex-1 overflow-y-auto p-8">
           {section === "personal" && (
             <PersonalInfoSection info={info} setInfo={setInfo} onSave={savePersonalInfo} saving={savingInfo} />
@@ -141,9 +142,7 @@ export default function CvEditorPage() {
 
 // ── Personal Info ─────────────────────────────────────────────────────────────
 
-function PersonalInfoSection({
-  info, setInfo, onSave, saving,
-}: {
+function PersonalInfoSection({ info, setInfo, onSave, saving }: {
   info: Partial<PersonalInfo>;
   setInfo: (v: Partial<PersonalInfo>) => void;
   onSave: () => void;
@@ -165,12 +164,13 @@ function PersonalInfoSection({
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Full Name"><Input {...field("fullName")} placeholder="Jane Doe" /></Field>
+          <Field label="Job Title"><Input {...field("jobTitle")} placeholder="Software Engineer" /></Field>
           <Field label="Email"><Input {...field("email")} placeholder="jane@example.com" /></Field>
           <Field label="Phone"><Input {...field("phone")} placeholder="+1 555 000 0000" /></Field>
           <Field label="Location"><Input {...field("location")} placeholder="Cape Town, SA" /></Field>
-          <Field label="LinkedIn"><Input {...field("linkedin")} placeholder="linkedin.com/in/jane" /></Field>
-          <Field label="GitHub"><Input {...field("github")} placeholder="github.com/jane" /></Field>
-          <Field label="Website" className="col-span-2"><Input {...field("website")} placeholder="janesmith.dev" /></Field>
+          <Field label="Website"><Input {...field("website")} placeholder="janesmith.dev" /></Field>
+          <Field label="LinkedIn"><Input {...field("linkedIn")} placeholder="linkedin.com/in/jane" /></Field>
+          <Field label="GitHub"><Input {...field("gitHub")} placeholder="github.com/jane" /></Field>
         </div>
         <Field label="Professional Summary">
           <Textarea {...field("summary")} placeholder="A brief overview of your background and goals..." rows={4} />
@@ -188,29 +188,36 @@ function PersonalInfoSection({
 
 // ── Work Experience ───────────────────────────────────────────────────────────
 
-function ExperienceSection({
-  cvId, experiences, setExperiences,
-}: {
+function ExperienceSection({ cvId, experiences, setExperiences }: {
   cvId: string;
   experiences: WorkExperience[];
   setExperiences: (v: WorkExperience[]) => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ company: "", role: "", startDate: "", endDate: "", current: false });
+  const [form, setForm] = useState({ company: "", role: "", location: "", startDate: "", endDate: "" });
 
   async function add() {
     setAdding(true);
     try {
-      const exp = await api.workExperience.create(cvId, { ...form, bullets: [] });
+      const exp = await api.workExperience.create(cvId, {
+        company: form.company,
+        role: form.role,
+        location: form.location || undefined,
+        startDate: form.startDate,
+        endDate: form.endDate || undefined,
+        isCurrent: !form.endDate,
+        bullets: [],
+        orderIndex: experiences.length,
+      });
       setExperiences([...experiences, exp]);
-      setForm({ company: "", role: "", startDate: "", endDate: "", current: false });
+      setForm({ company: "", role: "", location: "", startDate: "", endDate: "" });
     } finally {
       setAdding(false);
     }
   }
 
   async function remove(id: string) {
-    await api.workExperience.delete(id).catch(() => null);
+    await api.workExperience.delete(cvId, id).catch(() => null);
     setExperiences(experiences.filter((e) => e.id !== id));
   }
 
@@ -225,7 +232,9 @@ function ExperienceSection({
           <CardContent className="pt-4 flex items-start justify-between gap-4">
             <div>
               <p className="font-medium text-sm">{exp.role}</p>
-              <p className="text-xs text-muted-foreground">{exp.company} · {exp.startDate} – {exp.current ? "Present" : exp.endDate}</p>
+              <p className="text-xs text-muted-foreground">
+                {exp.company}{exp.location ? ` · ${exp.location}` : ""} · {exp.startDate} – {exp.isCurrent ? "Present" : exp.endDate}
+              </p>
             </div>
             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(exp.id)}>
               <Trash2 className="h-3.5 w-3.5" />
@@ -240,11 +249,13 @@ function ExperienceSection({
           <div className="grid grid-cols-2 gap-3">
             <Field label="Company"><Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} placeholder="Acme Corp" /></Field>
             <Field label="Role"><Input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} placeholder="Software Engineer" /></Field>
-            <Field label="Start Date"><Input value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} placeholder="2022-01" /></Field>
-            <Field label="End Date"><Input value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} placeholder="2024-06 or leave blank" /></Field>
+            <Field label="Location"><Input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="Remote" /></Field>
+            <div />
+            <Field label="Start Date"><Input value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} placeholder="2022-01-01" /></Field>
+            <Field label="End Date"><Input value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} placeholder="Leave blank if current" /></Field>
           </div>
           <div className="flex justify-end">
-            <Button size="sm" onClick={add} disabled={adding || !form.company || !form.role} className="gap-1.5">
+            <Button size="sm" onClick={add} disabled={adding || !form.company || !form.role || !form.startDate} className="gap-1.5">
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               Add
             </Button>
@@ -257,9 +268,7 @@ function ExperienceSection({
 
 // ── Education ─────────────────────────────────────────────────────────────────
 
-function EducationSection({
-  cvId, educations, setEducations,
-}: {
+function EducationSection({ cvId, educations, setEducations }: {
   cvId: string;
   educations: Education[];
   setEducations: (v: Education[]) => void;
@@ -270,7 +279,16 @@ function EducationSection({
   async function add() {
     setAdding(true);
     try {
-      const edu = await api.education.create(cvId, { ...form, achievements: [] });
+      const edu = await api.education.create(cvId, {
+        institution: form.institution,
+        degree: form.degree,
+        field: form.field,
+        startDate: form.startDate,
+        endDate: form.endDate || undefined,
+        isCurrent: !form.endDate,
+        achievements: [],
+        orderIndex: educations.length,
+      });
       setEducations([...educations, edu]);
       setForm({ institution: "", degree: "", field: "", startDate: "", endDate: "" });
     } finally {
@@ -279,7 +297,7 @@ function EducationSection({
   }
 
   async function remove(id: string) {
-    await api.education.delete(id).catch(() => null);
+    await api.education.delete(cvId, id).catch(() => null);
     setEducations(educations.filter((e) => e.id !== id));
   }
 
@@ -294,7 +312,7 @@ function EducationSection({
           <CardContent className="pt-4 flex items-start justify-between gap-4">
             <div>
               <p className="font-medium text-sm">{edu.degree} in {edu.field}</p>
-              <p className="text-xs text-muted-foreground">{edu.institution} · {edu.startDate} – {edu.endDate ?? "Present"}</p>
+              <p className="text-xs text-muted-foreground">{edu.institution} · {edu.startDate} – {edu.isCurrent ? "Present" : edu.endDate}</p>
             </div>
             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(edu.id)}>
               <Trash2 className="h-3.5 w-3.5" />
@@ -310,11 +328,11 @@ function EducationSection({
             <Field label="Institution" className="col-span-2"><Input value={form.institution} onChange={e => setForm(f => ({ ...f, institution: e.target.value }))} placeholder="University of Cape Town" /></Field>
             <Field label="Degree"><Input value={form.degree} onChange={e => setForm(f => ({ ...f, degree: e.target.value }))} placeholder="BSc" /></Field>
             <Field label="Field"><Input value={form.field} onChange={e => setForm(f => ({ ...f, field: e.target.value }))} placeholder="Computer Science" /></Field>
-            <Field label="Start Date"><Input value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} placeholder="2018-02" /></Field>
-            <Field label="End Date"><Input value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} placeholder="2022-11" /></Field>
+            <Field label="Start Date"><Input value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} placeholder="2018-02-01" /></Field>
+            <Field label="End Date"><Input value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} placeholder="Leave blank if current" /></Field>
           </div>
           <div className="flex justify-end">
-            <Button size="sm" onClick={add} disabled={adding || !form.institution} className="gap-1.5">
+            <Button size="sm" onClick={add} disabled={adding || !form.institution || !form.startDate} className="gap-1.5">
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               Add
             </Button>
@@ -327,9 +345,7 @@ function EducationSection({
 
 // ── Skills ────────────────────────────────────────────────────────────────────
 
-function SkillsSection({
-  cvId, skills, setSkills,
-}: {
+function SkillsSection({ cvId, skills, setSkills }: {
   cvId: string;
   skills: Skill[];
   setSkills: (v: Skill[]) => void;
@@ -343,6 +359,7 @@ function SkillsSection({
       const skill = await api.skills.create(cvId, {
         category: form.category,
         items: form.items.split(",").map((s) => s.trim()).filter(Boolean),
+        orderIndex: skills.length,
       });
       setSkills([...skills, skill]);
       setForm({ category: "", items: "" });
@@ -352,7 +369,7 @@ function SkillsSection({
   }
 
   async function remove(id: string) {
-    await api.skills.delete(id).catch(() => null);
+    await api.skills.delete(cvId, id).catch(() => null);
     setSkills(skills.filter((s) => s.id !== id));
   }
 
@@ -393,7 +410,7 @@ function SkillsSection({
   );
 }
 
-// ── Shared helpers ─────────────────────────────────────────────────────────────
+// ── Shared ────────────────────────────────────────────────────────────────────
 
 function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
