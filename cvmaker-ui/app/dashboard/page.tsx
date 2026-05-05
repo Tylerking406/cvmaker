@@ -35,14 +35,27 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     getOrCreateDevUser()
       .then((uid) => {
+        if (cancelled) return;
         setUserId(uid);
         return api.cvs.list(uid);
       })
-      .then(setCvs)
-      .catch(() => setError("Could not reach the API — is it running on port 5133?"))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (cancelled || !data) return;
+        setCvs(data);
+        setError(null);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Could not reach the API — is it running on port 5133?");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, []);
 
   async function createCv() {
