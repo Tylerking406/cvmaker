@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: cvmaker
       POSTGRES_PASSWORD: cvmaker_local
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./schema.local.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
