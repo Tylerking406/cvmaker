@@ -1,18 +1,21 @@
 import type { NextConfig } from "next";
 
+const backendUrl = process.env.BACKEND_URL ?? "http://localhost:5133";
+
 const nextConfig: NextConfig = {
+  output: "standalone",
+
   async rewrites() {
-    // Using `fallback` so Next.js checks all app/api/ route handlers first.
-    // Dynamic routes like /api/cvs/[cvId] are matched before the proxy runs.
-    // To switch to the real .NET backend: remove cvmaker-ui/app/api/ entirely;
-    // the fallback rewrite will then proxy everything to http://localhost:5133.
+    // Using `fallback` so app/api/ mock handlers are checked first.
+    // Dynamic routes like /api/cvs/[cvId] match before this proxy fires.
+    // To use the real backend: set BACKEND_URL env var (or remove app/api/).
     return {
       beforeFiles: [],
       afterFiles: [],
       fallback: [
         {
           source: "/api/:path*",
-          destination: "http://localhost:5133/api/:path*",
+          destination: `${backendUrl}/api/:path*`,
         },
       ],
     };

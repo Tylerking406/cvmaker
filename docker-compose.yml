@@ -1,0 +1,66 @@
+services:
+
+  # ─── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cvmaker
+      POSTGRES_USER: cvmaker
+      POSTGRES_PASSWORD: cvmaker_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.local.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cvmaker -d cvmaker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── .NET 8 API ───────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./CvMaker.Api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: >-
+        Host=db;Port=5432;Database=cvmaker;Username=cvmaker;Password=cvmaker_local
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - "5133:5133"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5133/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  # ─── Next.js Frontend ─────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./cvmaker-ui
+      dockerfile: Dockerfile
+      args:
+        # Points the fallback rewrite proxy at the API container.
+        # The mock app/api/ handlers still take priority — real backend is used
+        # only for any route that has no mock handler (currently none).
+        # To switch fully to the real backend: remove cvmaker-ui/app/api/.
+        BACKEND_URL: http://api:5133
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      BACKEND_URL: http://api:5133
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
