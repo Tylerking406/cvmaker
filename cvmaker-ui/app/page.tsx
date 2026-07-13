@@ -27,7 +27,7 @@ export default function HomePage() {
 
         <h1 className="text-5xl sm:text-6xl font-bold tracking-tight text-foreground max-w-3xl mb-6 leading-tight">
           Your CV.{" "}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">
             Beautifully crafted.
           </span>
         </h1>

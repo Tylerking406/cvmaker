@@ -16,14 +16,14 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectValue, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import {
   FileText, ChevronLeft, User, Briefcase, GraduationCap,
-  Wrench, FolderOpen, Award, Trophy, Loader2, Plus, Trash2, Save, Eye, ChevronDown, ChevronUp,
+  Wrench, FolderOpen, Award, Trophy, Loader2, Plus, Trash2, Save, Eye, ChevronDown, ChevronUp, CheckCircle2, Circle, Palette,
 } from "lucide-react";
 
 const errClass = (hasError: boolean) => (hasError ? "border-destructive focus-visible:ring-destructive" : "");
 
 const DEGREE_OPTIONS = [
-  "High School Diploma", "Associate Degree", "Diploma", "Certificate",
-  "BSc", "BA", "BEng", "BCom", "BCompSc", "MSc", "MA", "MBA", "PhD", "Other",
+  "High School Diploma", "Trade / Vocational Certificate", "Associate Degree", "Diploma", "Certificate",
+  "BA", "BSc", "BCom", "BEd", "BEng", "MA", "MSc", "MBA", "PhD", "Other",
 ];
 
 function DegreeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -44,8 +44,8 @@ function DegreeSelect({ value, onChange }: { value: string; onChange: (v: string
 }
 
 const SKILL_CATEGORY_OPTIONS = [
-  "Programming Languages", "Frontend", "Backend", "Databases",
-  "DevOps & Infrastructure", "Cloud", "Testing & QA", "Tools", "Soft Skills", "Other",
+  "Technical Skills", "Software & Tools", "Languages", "Communication & Interpersonal",
+  "Leadership & Management", "Customer Service", "Industry-Specific", "Soft Skills", "Other",
 ];
 
 function CategorySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -143,6 +143,17 @@ export default function CvEditorPage() {
     );
   }
 
+  const completeness: Record<Section, boolean> = {
+    personal: !!sanitizeText(info.fullName ?? ""),
+    experience: experiences.length > 0,
+    education: educations.length > 0,
+    skills: skills.length > 0,
+    projects: projects.length > 0,
+    certifications: certifications.length > 0,
+    achievements: achievements.length > 0,
+  };
+  const completedCount = Object.values(completeness).filter(Boolean).length;
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b border-border/50 px-6 py-3 flex items-center gap-4">
@@ -157,6 +168,12 @@ export default function CvEditorPage() {
           <FileText className="h-4 w-4 text-primary" />
           <span className="font-medium text-sm text-foreground">{cv?.title}</span>
         </div>
+        <Link href={`/cv/${id}/template`}>
+          <Button size="sm" variant="outline" className="gap-1.5">
+            <Palette className="h-4 w-4" />
+            Template
+          </Button>
+        </Link>
         <Link href={`/cv/${id}/preview`}>
           <Button size="sm" variant="outline" className="gap-1.5">
             <Eye className="h-4 w-4" />
@@ -167,6 +184,18 @@ export default function CvEditorPage() {
 
       <div className="flex flex-1 overflow-hidden">
         <aside className="w-56 border-r border-border/50 p-4 flex flex-col gap-1">
+          <div className="px-3 pb-3 mb-1 border-b border-border/50">
+            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+              <span>Profile completeness</span>
+              <span className="font-medium text-foreground">{completedCount}/{NAV_ITEMS.length}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${(completedCount / NAV_ITEMS.length) * 100}%` }}
+              />
+            </div>
+          </div>
           {NAV_ITEMS.map(({ id: sid, label, icon: Icon }) => (
             <button
               key={sid}
@@ -178,7 +207,12 @@ export default function CvEditorPage() {
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {label}
+              <span className="flex-1">{label}</span>
+              {completeness[sid] ? (
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+              ) : (
+                <Circle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
+              )}
             </button>
           ))}
         </aside>
@@ -260,13 +294,13 @@ function PersonalInfoSection({ info, setInfo, onSave, saving }: {
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Full Name" error={showError("fullName")}><Input {...field("fullName")} placeholder="Jane Doe" maxLength={200} /></Field>
-          <Field label="Job Title"><Input {...field("jobTitle")} placeholder="Software Engineer" maxLength={200} /></Field>
+          <Field label="Job Title"><Input {...field("jobTitle")} placeholder="e.g. Teacher, Security Officer, Store Manager" maxLength={200} /></Field>
           <Field label="Email" error={showError("email")}><Input {...field("email")} placeholder="jane@example.com" maxLength={200} /></Field>
           <Field label="Phone" error={showError("phone")}><Input {...field("phone")} placeholder="+1 555 000 0000" maxLength={30} /></Field>
           <Field label="Location"><Input {...field("location")} placeholder="Cape Town, SA" maxLength={200} /></Field>
           <Field label="Website" error={showError("website")}><Input {...field("website")} placeholder="janesmith.dev" maxLength={200} /></Field>
           <Field label="LinkedIn" error={showError("linkedIn")}><Input {...field("linkedIn")} placeholder="linkedin.com/in/jane" maxLength={200} /></Field>
-          <Field label="GitHub" error={showError("gitHub")}><Input {...field("gitHub")} placeholder="github.com/jane" maxLength={200} /></Field>
+          <Field label="Portfolio / GitHub" error={showError("gitHub")}><Input {...field("gitHub")} placeholder="yourportfolio.com (optional)" maxLength={200} /></Field>
         </div>
         <Field label="Professional Summary">
           <Textarea {...field("summary")} placeholder="A brief overview of your background and goals..." rows={4} maxLength={2000} />
@@ -279,6 +313,20 @@ function PersonalInfoSection({ info, setInfo, onSave, saving }: {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ── Empty state (shown above the Add form when a section has no entries) ──────────
+
+function EmptyState({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-border/60 py-10 px-6 flex flex-col items-center gap-2 text-center">
+      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mb-1">
+        <Icon className="h-5 w-5 text-primary/70" />
+      </div>
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="text-xs text-muted-foreground max-w-xs">{subtitle}</p>
+    </div>
   );
 }
 
@@ -447,6 +495,14 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
         <Briefcase className="h-4 w-4 text-primary" /> Work Experience
       </h2>
 
+      {experiences.length === 0 && (
+        <EmptyState
+          icon={Briefcase}
+          title="No work experience yet"
+          subtitle="Add your roles below to show employers your career history."
+        />
+      )}
+
       {experiences.map((exp) => (
         <Card key={exp.id}>
           <CardContent className="pt-4 space-y-3">
@@ -515,9 +571,9 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
               <Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, company: true }))} placeholder="Acme Corp" className={errClass(!!showError("company"))} maxLength={200} />
             </Field>
             <Field label="Role" error={showError("role")}>
-              <Input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, role: true }))} placeholder="Software Engineer" className={errClass(!!showError("role"))} maxLength={200} />
+              <Input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, role: true }))} placeholder="e.g. Sales Associate" className={errClass(!!showError("role"))} maxLength={200} />
             </Field>
-            <Field label="Location"><Input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="Remote" maxLength={200} /></Field>
+            <Field label="Location"><Input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Cape Town" maxLength={200} /></Field>
             <div />
             <Field label="Start Date" error={showError("startDate")}>
               <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, startDate: true }))} className={errClass(!!showError("startDate"))} />
@@ -654,6 +710,14 @@ function EducationSection({ cvId, educations, setEducations }: {
         <GraduationCap className="h-4 w-4 text-primary" /> Education
       </h2>
 
+      {educations.length === 0 && (
+        <EmptyState
+          icon={GraduationCap}
+          title="No education added yet"
+          subtitle="Add your schools or degrees below — even one entry helps."
+        />
+      )}
+
       {educations.map((edu) => (
         <Card key={edu.id}>
           <CardContent className="pt-4 space-y-3">
@@ -695,7 +759,7 @@ function EducationSection({ cvId, educations, setEducations }: {
                 </div>
                 <BulletEditor
                   label="Achievements / Notes"
-                  placeholder="e.g. Dean's list, relevant coursework..."
+                  placeholder="e.g. Graduated with honors, relevant coursework..."
                   bullets={editAchievements}
                   onAdd={text => setEditAchievements(a => [...a, text])}
                   onRemove={i => setEditAchievements(a => a.filter((_, idx) => idx !== i))}
@@ -718,12 +782,12 @@ function EducationSection({ cvId, educations, setEducations }: {
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Entry</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Institution" className="col-span-2" error={showError("institution")}>
-              <Input value={form.institution} onChange={e => setForm(f => ({ ...f, institution: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, institution: true }))} placeholder="University of Cape Town" className={errClass(!!showError("institution"))} maxLength={200} />
+              <Input value={form.institution} onChange={e => setForm(f => ({ ...f, institution: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, institution: true }))} placeholder="Name of school, college, or institution" className={errClass(!!showError("institution"))} maxLength={200} />
             </Field>
             <Field label="Degree" error={showError("degree")}>
               <DegreeSelect value={form.degree} onChange={v => setForm(f => ({ ...f, degree: v }))} />
             </Field>
-            <Field label="Field"><Input value={form.field} onChange={e => setForm(f => ({ ...f, field: e.target.value }))} placeholder="Computer Science" maxLength={200} /></Field>
+            <Field label="Field"><Input value={form.field} onChange={e => setForm(f => ({ ...f, field: e.target.value }))} placeholder="e.g. Business Administration" maxLength={200} /></Field>
             <Field label="Start Date" error={showError("startDate")}>
               <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, startDate: true }))} className={errClass(!!showError("startDate"))} />
             </Field>
@@ -843,6 +907,14 @@ function SkillsSection({ cvId, skills, setSkills }: {
         <Wrench className="h-4 w-4 text-primary" /> Skills
       </h2>
 
+      {skills.length === 0 && (
+        <EmptyState
+          icon={Wrench}
+          title="No skills added yet"
+          subtitle="Group your skills into categories like Frontend, Backend, or Tools below."
+        />
+      )}
+
       {skills.map((skill) => (
         <Card key={skill.id}>
           <CardContent className="pt-4 space-y-3">
@@ -893,7 +965,7 @@ function SkillsSection({ cvId, skills, setSkills }: {
             <CategorySelect value={form.category} onChange={v => setForm(f => ({ ...f, category: v }))} />
           </Field>
           <Field label="Skills (comma separated)" error={showError("items")}>
-            <Input value={form.items} onChange={e => setForm(f => ({ ...f, items: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, items: true }))} placeholder="React, TypeScript, Tailwind CSS" className={errClass(!!showError("items"))} maxLength={500} />
+            <Input value={form.items} onChange={e => setForm(f => ({ ...f, items: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, items: true }))} placeholder="e.g. Communication, Microsoft Excel, First Aid" className={errClass(!!showError("items"))} maxLength={500} />
           </Field>
           <div className="flex justify-end">
             <Button size="sm" onClick={add} disabled={adding} className="gap-1.5">
@@ -1006,6 +1078,14 @@ function ProjectsSection({ cvId, projects, setProjects }: {
         <FolderOpen className="h-4 w-4 text-primary" /> Projects
       </h2>
 
+      {projects.length === 0 && (
+        <EmptyState
+          icon={FolderOpen}
+          title="No projects added yet"
+          subtitle="Showcase things you've built — side projects count too."
+        />
+      )}
+
       {projects.map((proj) => (
         <Card key={proj.id}>
           <CardContent className="pt-4 space-y-3">
@@ -1061,11 +1141,11 @@ function ProjectsSection({ cvId, projects, setProjects }: {
         <CardContent className="pt-4 space-y-4">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Project</p>
           <Field label="Project Name" error={showError("name")}>
-            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, name: true }))} placeholder="My Awesome App" className={errClass(!!showError("name"))} maxLength={200} />
+            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, name: true }))} placeholder="e.g. Community Fundraiser" className={errClass(!!showError("name"))} maxLength={200} />
           </Field>
           <Field label="Description"><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Short description" maxLength={500} /></Field>
           <Field label="URL" error={showError("url")}>
-            <Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, url: true }))} placeholder="github.com/you/project" className={errClass(!!showError("url"))} maxLength={300} />
+            <Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, url: true }))} placeholder="Link to project (optional)" className={errClass(!!showError("url"))} maxLength={300} />
           </Field>
           <div className="border-t border-border/40 pt-3">
             <BulletEditor
@@ -1189,6 +1269,14 @@ function CertificationsSection({ cvId, certifications, setCertifications }: {
         <Award className="h-4 w-4 text-primary" /> Certifications
       </h2>
 
+      {certifications.length === 0 && (
+        <EmptyState
+          icon={Award}
+          title="No certifications added yet"
+          subtitle="Add relevant certifications to stand out to employers."
+        />
+      )}
+
       {certifications.map((cert) => (
         <Card key={cert.id}>
           <CardContent className="pt-4 space-y-3">
@@ -1249,13 +1337,13 @@ function CertificationsSection({ cvId, certifications, setCertifications }: {
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Certification</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Name" className="col-span-2" error={showError("name")}>
-              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, name: true }))} placeholder="AWS Solutions Architect" className={errClass(!!showError("name"))} maxLength={200} />
+              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, name: true }))} placeholder="e.g. First Aid & CPR Certified" className={errClass(!!showError("name"))} maxLength={200} />
             </Field>
             <Field label="Issuer" error={showError("issuer")}>
-              <Input value={form.issuer} onChange={e => setForm(f => ({ ...f, issuer: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, issuer: true }))} placeholder="Amazon Web Services" className={errClass(!!showError("issuer"))} maxLength={200} />
+              <Input value={form.issuer} onChange={e => setForm(f => ({ ...f, issuer: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, issuer: true }))} placeholder="e.g. American Red Cross" className={errClass(!!showError("issuer"))} maxLength={200} />
             </Field>
             <Field label="URL" error={showError("url")}>
-              <Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, url: true }))} placeholder="credly.com/badges/..." className={errClass(!!showError("url"))} maxLength={300} />
+              <Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, url: true }))} placeholder="Link to certificate (optional)" className={errClass(!!showError("url"))} maxLength={300} />
             </Field>
             <Field label="Issue Date" error={showError("issueDate")}>
               <Input type="date" value={form.issueDate} onChange={e => setForm(f => ({ ...f, issueDate: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, issueDate: true }))} className={errClass(!!showError("issueDate"))} />
@@ -1349,6 +1437,14 @@ function AchievementsSection({ cvId, achievements, setAchievements }: {
         <Trophy className="h-4 w-4 text-primary" /> Achievements
       </h2>
 
+      {achievements.length === 0 && (
+        <EmptyState
+          icon={Trophy}
+          title="No achievements added yet"
+          subtitle="Awards, recognitions, or milestones worth bragging about go here."
+        />
+      )}
+
       {achievements.map((ach) => (
         <Card key={ach.id}>
           <CardContent className="pt-4 space-y-3">
@@ -1393,7 +1489,7 @@ function AchievementsSection({ cvId, achievements, setAchievements }: {
             <Textarea
               value={draft}
               onChange={e => setDraft(e.target.value)}
-              placeholder="e.g. Won 1st place at HackZA 2023 hackathon"
+              placeholder="e.g. Employee of the Month, March 2024"
               rows={2}
               maxLength={ACHIEVEMENT_MAX_LENGTH}
               className={errClass(!!error)}
