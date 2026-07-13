@@ -21,20 +21,6 @@ import {
 
 const errClass = (hasError: boolean) => (hasError ? "border-destructive focus-visible:ring-destructive" : "");
 
-function CurrentCheckbox({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <label className="flex items-center gap-2 text-xs text-muted-foreground select-none cursor-pointer">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={e => onChange(e.target.checked)}
-        className="h-3.5 w-3.5 rounded border-input accent-primary"
-      />
-      {label}
-    </label>
-  );
-}
-
 const DEGREE_OPTIONS = [
   "High School Diploma", "Associate Degree", "Diploma", "Certificate",
   "BSc", "BA", "BEng", "BCom", "BCompSc", "MSc", "MA", "MBA", "PhD", "Other",
@@ -501,9 +487,6 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
                   </Field>
                   <Field label="End Date" error={showEditError("endDate")}>
                     <Input type="date" value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, endDate: true }))} className={errClass(!!showEditError("endDate"))} />
-                    <div className="pt-1">
-                      <CurrentCheckbox checked={!editForm.endDate} onChange={v => setEditForm(f => ({ ...f, endDate: v ? "" : f.endDate }))} label="I currently work here" />
-                    </div>
                   </Field>
                 </div>
                 <BulletEditor
@@ -541,9 +524,6 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
             </Field>
             <Field label="End Date" error={showError("endDate")}>
               <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, endDate: true }))} className={errClass(!!showError("endDate"))} />
-              <div className="pt-1">
-                <CurrentCheckbox checked={!form.endDate} onChange={v => setForm(f => ({ ...f, endDate: v ? "" : f.endDate }))} label="I currently work here" />
-              </div>
             </Field>
           </div>
           <div className="border-t border-border/40 pt-3">
@@ -711,9 +691,6 @@ function EducationSection({ cvId, educations, setEducations }: {
                   </Field>
                   <Field label="End Date" error={showEditError("endDate")}>
                     <Input type="date" value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, endDate: true }))} className={errClass(!!showEditError("endDate"))} />
-                    <div className="pt-1">
-                      <CurrentCheckbox checked={!editForm.endDate} onChange={v => setEditForm(f => ({ ...f, endDate: v ? "" : f.endDate }))} label="I'm currently studying here" />
-                    </div>
                   </Field>
                 </div>
                 <BulletEditor
@@ -752,9 +729,6 @@ function EducationSection({ cvId, educations, setEducations }: {
             </Field>
             <Field label="End Date" error={showError("endDate")}>
               <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, endDate: true }))} className={errClass(!!showError("endDate"))} />
-              <div className="pt-1">
-                <CurrentCheckbox checked={!form.endDate} onChange={v => setForm(f => ({ ...f, endDate: v ? "" : f.endDate }))} label="I'm currently studying here" />
-              </div>
             </Field>
           </div>
           <div className="border-t border-border/40 pt-3">
