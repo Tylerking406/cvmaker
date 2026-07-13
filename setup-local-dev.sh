@@ -2,11 +2,11 @@
 set -e
 
 # ─────────────────────────────────────────
-# CvMaker — Local Dev Setup Script (Ubuntu)
+CvMaker — Local Dev Setup Script (Ubuntu)
 # ─────────────────────────────────────────
 
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+YELLOW='\1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
@@ -43,7 +43,6 @@ sudo apt-get install -y -qq git wget gpg curl postgresql postgresql-contrib
 if ! command -v dotnet &>/dev/null || [[ "$(dotnet --version)" != 8* ]]; then
   info "Installing .NET 8 SDK..."
   sudo apt-get install -y -qq dotnet-sdk-8.0 2>/dev/null || {
-    # Fallback: Microsoft feed
     wget -q https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O /tmp/packages-microsoft-prod.deb
     sudo dpkg -i /tmp/packages-microsoft-prod.deb
     sudo apt-get update -qq
@@ -54,7 +53,18 @@ else
 fi
 
 # ─────────────────────────────────────────
-# 3. VS Code
+# 3. Node.js 20 (for the frontend)
+# ─────────────────────────────────────────
+if ! command -v node &>/dev/null; then
+  info "Installing Node.js 20..."
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+  sudo apt-get install -y -qq nodejs
+else
+  info "Node.js already installed ($(node --version))."
+fi
+
+# ─────────────────────────────────────────
+# 4. VS Code
 # ─────────────────────────────────────────
 if ! command -v code &>/dev/null; then
   info "Installing VS Code..."
@@ -71,7 +81,7 @@ else
 fi
 
 # ─────────────────────────────────────────
-# 4. VS Code extensions
+# 5. VS Code extensions
 # ─────────────────────────────────────────
 info "Installing VS Code extensions..."
 code --install-extension ms-dotnettools.csdevkit       --force 2>/dev/null || warn "Could not install C# Dev Kit (needs a display — run manually if in SSH)."
@@ -79,7 +89,7 @@ code --install-extension ckolkman.vscode-postgres      --force 2>/dev/null || tr
 code --install-extension patcx.vscode-nuget-gallery    --force 2>/dev/null || true
 
 # ─────────────────────────────────────────
-# 5. PostgreSQL — start & create DB/user
+# 6. PostgreSQL — start & create DB/user
 # ─────────────────────────────────────────
 info "Starting PostgreSQL..."
 sudo systemctl start postgresql
@@ -92,14 +102,13 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | gr
 sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1 || \
   sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
 
-# Make sure the user owns the DB (idempotent)
 sudo -u postgres psql -c "ALTER DATABASE $DB_NAME OWNER TO $DB_USER;" 2>/dev/null || true
 
 # ─────────────────────────────────────────
-# 6. Clone repo (skip if already cloned)
+# 7. Clone repo (skip if already cloned)
 # ─────────────────────────────────────────
 REPO_URL="https://github.com/Tylerking406/cvmaker.git"
-BRANCH="claude/setup-local-dev-environment-QQ4PN"
+BRANCH="claude/mock-api-local-dev"
 CLONE_DIR="$HOME/cvmaker"
 
 if [ -d "$CLONE_DIR/.git" ]; then
@@ -114,7 +123,7 @@ else
 fi
 
 # ─────────────────────────────────────────
-# 7. appsettings.Development.json
+# 8. appsettings.Development.json
 # ─────────────────────────────────────────
 SETTINGS_FILE="$CLONE_DIR/CvMaker.Api/appsettings.Development.json"
 
@@ -132,16 +141,22 @@ else
 fi
 
 # ─────────────────────────────────────────
-# 8. Apply DB schema
+# 9. Apply DB schema
 # ─────────────────────────────────────────
 info "Applying schema.local.sql to '$DB_NAME'..."
 PGPASSWORD="$DB_PASS" psql -U "$DB_USER" -d "$DB_NAME" -h localhost -f "$CLONE_DIR/schema.local.sql"
 
 # ─────────────────────────────────────────
-# 9. Restore NuGet packages
+# 10. Restore NuGet packages
 # ─────────────────────────────────────────
 info "Restoring .NET packages..."
 dotnet restore "$CLONE_DIR/CvMaker.Api/CvMaker.Api.csproj"
+
+# ─────────────────────────────────────────
+# 11. Install frontend dependencies
+# ─────────────────────────────────────────
+info "Installing frontend npm packages..."
+npm install --prefix "$CLONE_DIR/cvmaker-ui" --silent
 
 # ─────────────────────────────────────────
 # Done
@@ -151,13 +166,14 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN}  Setup complete!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "  To run the API:"
-echo "    cd $CLONE_DIR/CvMaker.Api"
-echo "    dotnet run"
+echo "  ▶ Run the frontend only (mock mode — no backend needed):"
+echo "    cd $CLONE_DIR/cvmaker-ui && npm run dev"
+echo "    Open: http://localhost:3000"
 echo ""
-echo "  Swagger UI: http://localhost:5000/swagger"
-echo "  Health check: http://localhost:5000/health"
+echo "  ▶ Run the .NET API (needed for real-data mode):"
+echo "    cd $CLONE_DIR/CvMaker.Api && dotnet run"
+echo "    Swagger: http://localhost:5133/swagger"
+echo "    Health:  http://localhost:5133/health"
 echo ""
-echo "  To open in VS Code:"
-echo "    code $CLONE_DIR"
+echo "  See DEVELOPMENT.md for full instructions."
 echo ""
