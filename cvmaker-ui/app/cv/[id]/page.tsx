@@ -4,16 +4,80 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, type Cv, type PersonalInfo, type WorkExperience, type Education, type Skill, type Project, type Certification, type Achievement } from "@/lib/api";
+import {
+  sanitizeText, isValidEmail, isValidPhone, isValidUrl, isValidDate, isDateOnOrAfter, splitSanitizedList,
+} from "@/lib/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectValue, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import {
   FileText, ChevronLeft, User, Briefcase, GraduationCap,
   Wrench, FolderOpen, Award, Trophy, Loader2, Plus, Trash2, Save, Eye, ChevronDown, ChevronUp,
 } from "lucide-react";
+
+const errClass = (hasError: boolean) => (hasError ? "border-destructive focus-visible:ring-destructive" : "");
+
+function CurrentCheckbox({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label className="flex items-center gap-2 text-xs text-muted-foreground select-none cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={e => onChange(e.target.checked)}
+        className="h-3.5 w-3.5 rounded border-input accent-primary"
+      />
+      {label}
+    </label>
+  );
+}
+
+const DEGREE_OPTIONS = [
+  "High School Diploma", "Associate Degree", "Diploma", "Certificate",
+  "BSc", "BA", "BEng", "BCom", "BCompSc", "MSc", "MA", "MBA", "PhD", "Other",
+];
+
+function DegreeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const isCustom = value !== "" && !DEGREE_OPTIONS.slice(0, -1).includes(value);
+  return (
+    <div className="space-y-2">
+      <Select value={isCustom ? "Other" : value} onValueChange={v => onChange(v === "Other" ? "" : v)}>
+        <SelectTrigger><SelectValue placeholder="Select degree type" /></SelectTrigger>
+        <SelectContent>
+          {DEGREE_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      {isCustom && (
+        <Input value={value} onChange={e => onChange(e.target.value)} placeholder="Enter degree name" className="text-sm h-8" />
+      )}
+    </div>
+  );
+}
+
+const SKILL_CATEGORY_OPTIONS = [
+  "Programming Languages", "Frontend", "Backend", "Databases",
+  "DevOps & Infrastructure", "Cloud", "Testing & QA", "Tools", "Soft Skills", "Other",
+];
+
+function CategorySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const isCustom = value !== "" && !SKILL_CATEGORY_OPTIONS.slice(0, -1).includes(value);
+  return (
+    <div className="space-y-2">
+      <Select value={isCustom ? "Other" : value} onValueChange={v => onChange(v === "Other" ? "" : v)}>
+        <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
+        <SelectContent>
+          {SKILL_CATEGORY_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      {isCustom && (
+        <Input value={value} onChange={e => onChange(e.target.value)} placeholder="Enter category name" className="text-sm h-8" />
+      )}
+    </div>
+  );
+}
 
 type Section = "personal" | "experience" | "education" | "skills" | "projects" | "certifications" | "achievements";
 
@@ -69,15 +133,15 @@ export default function CvEditorPage() {
     setSavingInfo(true);
     try {
       const saved = await api.personalInfo.upsert(id, {
-        fullName: info.fullName ?? "",
-        jobTitle: info.jobTitle,
-        email: info.email,
-        phone: info.phone,
-        location: info.location,
-        linkedIn: info.linkedIn,
-        gitHub: info.gitHub,
-        website: info.website,
-        summary: info.summary,
+        fullName: sanitizeText(info.fullName ?? ""),
+        jobTitle: sanitizeText(info.jobTitle ?? "") || undefined,
+        email: sanitizeText(info.email ?? "") || undefined,
+        phone: sanitizeText(info.phone ?? "") || undefined,
+        location: sanitizeText(info.location ?? "") || undefined,
+        linkedIn: sanitizeText(info.linkedIn ?? "") || undefined,
+        gitHub: sanitizeText(info.gitHub ?? "") || undefined,
+        website: sanitizeText(info.website ?? "") || undefined,
+        summary: sanitizeText(info.summary ?? "") || undefined,
       });
       setInfo(saved);
     } finally {
@@ -163,17 +227,42 @@ export default function CvEditorPage() {
 
 // ── Personal Info ─────────────────────────────────────────────────────────────
 
+function getPersonalInfoErrors(info: Partial<PersonalInfo>): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!sanitizeText(info.fullName ?? "")) errors.fullName = "Full name is required.";
+  if (!isValidEmail(info.email ?? "")) errors.email = "Enter a valid email address.";
+  if (!isValidPhone(info.phone ?? "")) errors.phone = "Enter a valid phone number.";
+  if (!isValidUrl(info.website ?? "")) errors.website = "Enter a valid URL.";
+  if (!isValidUrl(info.linkedIn ?? "")) errors.linkedIn = "Enter a valid URL.";
+  if (!isValidUrl(info.gitHub ?? "")) errors.gitHub = "Enter a valid URL.";
+  return errors;
+}
+
 function PersonalInfoSection({ info, setInfo, onSave, saving }: {
   info: Partial<PersonalInfo>;
   setInfo: (v: Partial<PersonalInfo>) => void;
   onSave: () => void;
   saving: boolean;
 }) {
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [attempted, setAttempted] = useState(false);
+
+  const errors = getPersonalInfoErrors(info);
+  const showError = (key: string) => (touched[key] || attempted ? errors[key] : undefined);
+
   const field = (key: keyof PersonalInfo) => ({
     value: (info[key] as string) ?? "",
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setInfo({ ...info, [key]: e.target.value }),
+    onBlur: () => setTouched(t => ({ ...t, [key]: true })),
+    className: errClass(!!showError(key)),
   });
+
+  function handleSave() {
+    setAttempted(true);
+    if (Object.keys(errors).length > 0) return;
+    onSave();
+  }
 
   return (
     <Card className="max-w-2xl">
@@ -184,20 +273,20 @@ function PersonalInfoSection({ info, setInfo, onSave, saving }: {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Full Name"><Input {...field("fullName")} placeholder="Jane Doe" /></Field>
-          <Field label="Job Title"><Input {...field("jobTitle")} placeholder="Software Engineer" /></Field>
-          <Field label="Email"><Input {...field("email")} placeholder="jane@example.com" /></Field>
-          <Field label="Phone"><Input {...field("phone")} placeholder="+1 555 000 0000" /></Field>
-          <Field label="Location"><Input {...field("location")} placeholder="Cape Town, SA" /></Field>
-          <Field label="Website"><Input {...field("website")} placeholder="janesmith.dev" /></Field>
-          <Field label="LinkedIn"><Input {...field("linkedIn")} placeholder="linkedin.com/in/jane" /></Field>
-          <Field label="GitHub"><Input {...field("gitHub")} placeholder="github.com/jane" /></Field>
+          <Field label="Full Name" error={showError("fullName")}><Input {...field("fullName")} placeholder="Jane Doe" maxLength={200} /></Field>
+          <Field label="Job Title"><Input {...field("jobTitle")} placeholder="Software Engineer" maxLength={200} /></Field>
+          <Field label="Email" error={showError("email")}><Input {...field("email")} placeholder="jane@example.com" maxLength={200} /></Field>
+          <Field label="Phone" error={showError("phone")}><Input {...field("phone")} placeholder="+1 555 000 0000" maxLength={30} /></Field>
+          <Field label="Location"><Input {...field("location")} placeholder="Cape Town, SA" maxLength={200} /></Field>
+          <Field label="Website" error={showError("website")}><Input {...field("website")} placeholder="janesmith.dev" maxLength={200} /></Field>
+          <Field label="LinkedIn" error={showError("linkedIn")}><Input {...field("linkedIn")} placeholder="linkedin.com/in/jane" maxLength={200} /></Field>
+          <Field label="GitHub" error={showError("gitHub")}><Input {...field("gitHub")} placeholder="github.com/jane" maxLength={200} /></Field>
         </div>
         <Field label="Professional Summary">
-          <Textarea {...field("summary")} placeholder="A brief overview of your background and goals..." rows={4} />
+          <Textarea {...field("summary")} placeholder="A brief overview of your background and goals..." rows={4} maxLength={2000} />
         </Field>
         <div className="flex justify-end pt-2">
-          <Button onClick={onSave} disabled={saving} className="gap-2">
+          <Button onClick={handleSave} disabled={saving} className="gap-2">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save
           </Button>
@@ -265,27 +354,51 @@ function BulletEditor({
 
 // ── Work Experience ───────────────────────────────────────────────────────────
 
+type ExperienceForm = { company: string; role: string; location: string; startDate: string; endDate: string };
+
+function getExperienceErrors(f: ExperienceForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!sanitizeText(f.company)) errors.company = "Company is required.";
+  if (!sanitizeText(f.role)) errors.role = "Role is required.";
+  if (!f.startDate) errors.startDate = "Start date is required.";
+  else if (!isValidDate(f.startDate)) errors.startDate = "Enter a valid date.";
+  if (f.endDate && !isValidDate(f.endDate)) errors.endDate = "Enter a valid date.";
+  else if (f.endDate && !isDateOnOrAfter(f.startDate, f.endDate)) errors.endDate = "End date must be after the start date.";
+  return errors;
+}
+
 function ExperienceSection({ cvId, experiences, setExperiences }: {
   cvId: string;
   experiences: WorkExperience[];
   setExperiences: (v: WorkExperience[]) => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ company: "", role: "", location: "", startDate: "", endDate: "" });
+  const [form, setForm] = useState<ExperienceForm>({ company: "", role: "", location: "", startDate: "", endDate: "" });
   const [newBullets, setNewBullets] = useState<string[]>([]);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [attempted, setAttempted] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ company: "", role: "", location: "", startDate: "", endDate: "" });
+  const [editForm, setEditForm] = useState<ExperienceForm>({ company: "", role: "", location: "", startDate: "", endDate: "" });
   const [editBullets, setEditBullets] = useState<string[]>([]);
+  const [editTouched, setEditTouched] = useState<Record<string, boolean>>({});
+  const [editAttempted, setEditAttempted] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  const errors = getExperienceErrors(form);
+  const showError = (key: string) => (touched[key] || attempted ? errors[key] : undefined);
+  const editErrors = getExperienceErrors(editForm);
+  const showEditError = (key: string) => (editTouched[key] || editAttempted ? editErrors[key] : undefined);
+
   async function add() {
+    setAttempted(true);
+    if (Object.keys(errors).length > 0) return;
     setAdding(true);
     try {
       const exp = await api.workExperience.create(cvId, {
-        company: form.company,
-        role: form.role,
-        location: form.location || undefined,
+        company: sanitizeText(form.company),
+        role: sanitizeText(form.role),
+        location: sanitizeText(form.location) || undefined,
         startDate: form.startDate,
         endDate: form.endDate || undefined,
         isCurrent: !form.endDate,
@@ -295,6 +408,8 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
       setExperiences([...experiences, exp]);
       setForm({ company: "", role: "", location: "", startDate: "", endDate: "" });
       setNewBullets([]);
+      setTouched({});
+      setAttempted(false);
     } finally {
       setAdding(false);
     }
@@ -310,6 +425,8 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
     setEditingId(exp.id);
     setEditForm({ company: exp.company, role: exp.role, location: exp.location ?? "", startDate: exp.startDate, endDate: exp.endDate ?? "" });
     setEditBullets(exp.bullets);
+    setEditTouched({});
+    setEditAttempted(false);
   }
 
   function cancelEdit() {
@@ -317,13 +434,15 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
   }
 
   async function saveEdit(exp: WorkExperience) {
+    setEditAttempted(true);
+    if (Object.keys(editErrors).length > 0) return;
     setSavingEdit(true);
     try {
       const updated = await api.workExperience.update(cvId, exp.id, {
         ...exp,
-        company: editForm.company,
-        role: editForm.role,
-        location: editForm.location || undefined,
+        company: sanitizeText(editForm.company),
+        role: sanitizeText(editForm.role),
+        location: sanitizeText(editForm.location) || undefined,
         startDate: editForm.startDate,
         endDate: editForm.endDate || undefined,
         isCurrent: !editForm.endDate,
@@ -369,12 +488,23 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
             {editingId === exp.id && (
               <div className="border-t border-border/50 pt-3 space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Company"><Input value={editForm.company} onChange={e => setEditForm(f => ({ ...f, company: e.target.value }))} /></Field>
-                  <Field label="Role"><Input value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} /></Field>
-                  <Field label="Location"><Input value={editForm.location} onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))} /></Field>
+                  <Field label="Company" error={showEditError("company")}>
+                    <Input value={editForm.company} onChange={e => setEditForm(f => ({ ...f, company: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, company: true }))} className={errClass(!!showEditError("company"))} maxLength={200} />
+                  </Field>
+                  <Field label="Role" error={showEditError("role")}>
+                    <Input value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, role: true }))} className={errClass(!!showEditError("role"))} maxLength={200} />
+                  </Field>
+                  <Field label="Location"><Input value={editForm.location} onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))} maxLength={200} /></Field>
                   <div />
-                  <Field label="Start Date"><Input value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} /></Field>
-                  <Field label="End Date"><Input value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} placeholder="Leave blank if current" /></Field>
+                  <Field label="Start Date" error={showEditError("startDate")}>
+                    <Input type="date" value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, startDate: true }))} className={errClass(!!showEditError("startDate"))} />
+                  </Field>
+                  <Field label="End Date" error={showEditError("endDate")}>
+                    <Input type="date" value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, endDate: true }))} className={errClass(!!showEditError("endDate"))} />
+                    <div className="pt-1">
+                      <CurrentCheckbox checked={!editForm.endDate} onChange={v => setEditForm(f => ({ ...f, endDate: v ? "" : f.endDate }))} label="I currently work here" />
+                    </div>
+                  </Field>
                 </div>
                 <BulletEditor
                   bullets={editBullets}
@@ -383,7 +513,7 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
                 />
                 <div className="flex justify-end gap-2">
                   <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
-                  <Button size="sm" onClick={() => saveEdit(exp)} disabled={savingEdit || !editForm.company || !editForm.role || !editForm.startDate} className="gap-1.5">
+                  <Button size="sm" onClick={() => saveEdit(exp)} disabled={savingEdit} className="gap-1.5">
                     {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                     Save
                   </Button>
@@ -398,12 +528,23 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
         <CardContent className="pt-4 space-y-4">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Entry</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Company"><Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} placeholder="Acme Corp" /></Field>
-            <Field label="Role"><Input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} placeholder="Software Engineer" /></Field>
-            <Field label="Location"><Input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="Remote" /></Field>
+            <Field label="Company" error={showError("company")}>
+              <Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, company: true }))} placeholder="Acme Corp" className={errClass(!!showError("company"))} maxLength={200} />
+            </Field>
+            <Field label="Role" error={showError("role")}>
+              <Input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, role: true }))} placeholder="Software Engineer" className={errClass(!!showError("role"))} maxLength={200} />
+            </Field>
+            <Field label="Location"><Input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="Remote" maxLength={200} /></Field>
             <div />
-            <Field label="Start Date"><Input value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} placeholder="2022-01-01" /></Field>
-            <Field label="End Date"><Input value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} placeholder="Leave blank if current" /></Field>
+            <Field label="Start Date" error={showError("startDate")}>
+              <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, startDate: true }))} className={errClass(!!showError("startDate"))} />
+            </Field>
+            <Field label="End Date" error={showError("endDate")}>
+              <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, endDate: true }))} className={errClass(!!showError("endDate"))} />
+              <div className="pt-1">
+                <CurrentCheckbox checked={!form.endDate} onChange={v => setForm(f => ({ ...f, endDate: v ? "" : f.endDate }))} label="I currently work here" />
+              </div>
+            </Field>
           </div>
           <div className="border-t border-border/40 pt-3">
             <BulletEditor
@@ -413,7 +554,7 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
             />
           </div>
           <div className="flex justify-center">
-            <Button size="sm" onClick={add} disabled={adding || !form.company || !form.role || !form.startDate} className="gap-1.5">
+            <Button size="sm" onClick={add} disabled={adding} className="gap-1.5">
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               Save
             </Button>
@@ -426,27 +567,51 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
 
 // ── Education ─────────────────────────────────────────────────────────────────
 
+type EducationForm = { institution: string; degree: string; field: string; startDate: string; endDate: string };
+
+function getEducationErrors(f: EducationForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!sanitizeText(f.institution)) errors.institution = "Institution is required.";
+  if (!sanitizeText(f.degree)) errors.degree = "Degree is required.";
+  if (!f.startDate) errors.startDate = "Start date is required.";
+  else if (!isValidDate(f.startDate)) errors.startDate = "Enter a valid date.";
+  if (f.endDate && !isValidDate(f.endDate)) errors.endDate = "Enter a valid date.";
+  else if (f.endDate && !isDateOnOrAfter(f.startDate, f.endDate)) errors.endDate = "End date must be after the start date.";
+  return errors;
+}
+
 function EducationSection({ cvId, educations, setEducations }: {
   cvId: string;
   educations: Education[];
   setEducations: (v: Education[]) => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ institution: "", degree: "", field: "", startDate: "", endDate: "" });
+  const [form, setForm] = useState<EducationForm>({ institution: "", degree: "", field: "", startDate: "", endDate: "" });
   const [newAchievements, setNewAchievements] = useState<string[]>([]);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [attempted, setAttempted] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ institution: "", degree: "", field: "", startDate: "", endDate: "" });
+  const [editForm, setEditForm] = useState<EducationForm>({ institution: "", degree: "", field: "", startDate: "", endDate: "" });
   const [editAchievements, setEditAchievements] = useState<string[]>([]);
+  const [editTouched, setEditTouched] = useState<Record<string, boolean>>({});
+  const [editAttempted, setEditAttempted] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  const errors = getEducationErrors(form);
+  const showError = (key: string) => (touched[key] || attempted ? errors[key] : undefined);
+  const editErrors = getEducationErrors(editForm);
+  const showEditError = (key: string) => (editTouched[key] || editAttempted ? editErrors[key] : undefined);
+
   async function add() {
+    setAttempted(true);
+    if (Object.keys(errors).length > 0) return;
     setAdding(true);
     try {
       const edu = await api.education.create(cvId, {
-        institution: form.institution,
-        degree: form.degree,
-        field: form.field,
+        institution: sanitizeText(form.institution),
+        degree: sanitizeText(form.degree),
+        field: sanitizeText(form.field),
         startDate: form.startDate,
         endDate: form.endDate || undefined,
         isCurrent: !form.endDate,
@@ -456,6 +621,8 @@ function EducationSection({ cvId, educations, setEducations }: {
       setEducations([...educations, edu]);
       setForm({ institution: "", degree: "", field: "", startDate: "", endDate: "" });
       setNewAchievements([]);
+      setTouched({});
+      setAttempted(false);
     } finally {
       setAdding(false);
     }
@@ -471,6 +638,8 @@ function EducationSection({ cvId, educations, setEducations }: {
     setEditingId(edu.id);
     setEditForm({ institution: edu.institution, degree: edu.degree, field: edu.field, startDate: edu.startDate, endDate: edu.endDate ?? "" });
     setEditAchievements(edu.achievements);
+    setEditTouched({});
+    setEditAttempted(false);
   }
 
   function cancelEdit() {
@@ -478,13 +647,15 @@ function EducationSection({ cvId, educations, setEducations }: {
   }
 
   async function saveEdit(edu: Education) {
+    setEditAttempted(true);
+    if (Object.keys(editErrors).length > 0) return;
     setSavingEdit(true);
     try {
       const updated = await api.education.update(cvId, edu.id, {
         ...edu,
-        institution: editForm.institution,
-        degree: editForm.degree,
-        field: editForm.field,
+        institution: sanitizeText(editForm.institution),
+        degree: sanitizeText(editForm.degree),
+        field: sanitizeText(editForm.field),
         startDate: editForm.startDate,
         endDate: editForm.endDate || undefined,
         isCurrent: !editForm.endDate,
@@ -528,11 +699,22 @@ function EducationSection({ cvId, educations, setEducations }: {
             {editingId === edu.id && (
               <div className="border-t border-border/50 pt-3 space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Institution" className="col-span-2"><Input value={editForm.institution} onChange={e => setEditForm(f => ({ ...f, institution: e.target.value }))} /></Field>
-                  <Field label="Degree"><Input value={editForm.degree} onChange={e => setEditForm(f => ({ ...f, degree: e.target.value }))} /></Field>
-                  <Field label="Field"><Input value={editForm.field} onChange={e => setEditForm(f => ({ ...f, field: e.target.value }))} /></Field>
-                  <Field label="Start Date"><Input value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} /></Field>
-                  <Field label="End Date"><Input value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} placeholder="Leave blank if current" /></Field>
+                  <Field label="Institution" className="col-span-2" error={showEditError("institution")}>
+                    <Input value={editForm.institution} onChange={e => setEditForm(f => ({ ...f, institution: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, institution: true }))} className={errClass(!!showEditError("institution"))} maxLength={200} />
+                  </Field>
+                  <Field label="Degree" error={showEditError("degree")}>
+                    <DegreeSelect value={editForm.degree} onChange={v => setEditForm(f => ({ ...f, degree: v }))} />
+                  </Field>
+                  <Field label="Field"><Input value={editForm.field} onChange={e => setEditForm(f => ({ ...f, field: e.target.value }))} maxLength={200} /></Field>
+                  <Field label="Start Date" error={showEditError("startDate")}>
+                    <Input type="date" value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, startDate: true }))} className={errClass(!!showEditError("startDate"))} />
+                  </Field>
+                  <Field label="End Date" error={showEditError("endDate")}>
+                    <Input type="date" value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, endDate: true }))} className={errClass(!!showEditError("endDate"))} />
+                    <div className="pt-1">
+                      <CurrentCheckbox checked={!editForm.endDate} onChange={v => setEditForm(f => ({ ...f, endDate: v ? "" : f.endDate }))} label="I'm currently studying here" />
+                    </div>
+                  </Field>
                 </div>
                 <BulletEditor
                   label="Achievements / Notes"
@@ -543,7 +725,7 @@ function EducationSection({ cvId, educations, setEducations }: {
                 />
                 <div className="flex justify-end gap-2">
                   <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
-                  <Button size="sm" onClick={() => saveEdit(edu)} disabled={savingEdit || !editForm.institution || !editForm.startDate} className="gap-1.5">
+                  <Button size="sm" onClick={() => saveEdit(edu)} disabled={savingEdit} className="gap-1.5">
                     {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                     Save
                   </Button>
@@ -558,11 +740,22 @@ function EducationSection({ cvId, educations, setEducations }: {
         <CardContent className="pt-4 space-y-4">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Entry</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Institution" className="col-span-2"><Input value={form.institution} onChange={e => setForm(f => ({ ...f, institution: e.target.value }))} placeholder="University of Cape Town" /></Field>
-            <Field label="Degree"><Input value={form.degree} onChange={e => setForm(f => ({ ...f, degree: e.target.value }))} placeholder="BSc" /></Field>
-            <Field label="Field"><Input value={form.field} onChange={e => setForm(f => ({ ...f, field: e.target.value }))} placeholder="Computer Science" /></Field>
-            <Field label="Start Date"><Input value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} placeholder="2018-02-01" /></Field>
-            <Field label="End Date"><Input value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} placeholder="Leave blank if current" /></Field>
+            <Field label="Institution" className="col-span-2" error={showError("institution")}>
+              <Input value={form.institution} onChange={e => setForm(f => ({ ...f, institution: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, institution: true }))} placeholder="University of Cape Town" className={errClass(!!showError("institution"))} maxLength={200} />
+            </Field>
+            <Field label="Degree" error={showError("degree")}>
+              <DegreeSelect value={form.degree} onChange={v => setForm(f => ({ ...f, degree: v }))} />
+            </Field>
+            <Field label="Field"><Input value={form.field} onChange={e => setForm(f => ({ ...f, field: e.target.value }))} placeholder="Computer Science" maxLength={200} /></Field>
+            <Field label="Start Date" error={showError("startDate")}>
+              <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, startDate: true }))} className={errClass(!!showError("startDate"))} />
+            </Field>
+            <Field label="End Date" error={showError("endDate")}>
+              <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, endDate: true }))} className={errClass(!!showError("endDate"))} />
+              <div className="pt-1">
+                <CurrentCheckbox checked={!form.endDate} onChange={v => setForm(f => ({ ...f, endDate: v ? "" : f.endDate }))} label="I'm currently studying here" />
+              </div>
+            </Field>
           </div>
           <div className="border-t border-border/40 pt-3">
             <BulletEditor
@@ -574,7 +767,7 @@ function EducationSection({ cvId, educations, setEducations }: {
             />
           </div>
           <div className="flex justify-center">
-            <Button size="sm" onClick={add} disabled={adding || !form.institution || !form.startDate} className="gap-1.5">
+            <Button size="sm" onClick={add} disabled={adding} className="gap-1.5">
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               Save
             </Button>
@@ -587,28 +780,50 @@ function EducationSection({ cvId, educations, setEducations }: {
 
 // ── Skills ────────────────────────────────────────────────────────────────────
 
+type SkillForm = { category: string; items: string };
+
+function getSkillErrors(f: SkillForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!sanitizeText(f.category)) errors.category = "Category is required.";
+  if (splitSanitizedList(f.items).length === 0) errors.items = "Add at least one skill.";
+  return errors;
+}
+
 function SkillsSection({ cvId, skills, setSkills }: {
   cvId: string;
   skills: Skill[];
   setSkills: (v: Skill[]) => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ category: "", items: "" });
+  const [form, setForm] = useState<SkillForm>({ category: "", items: "" });
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [attempted, setAttempted] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ category: "", items: "" });
+  const [editForm, setEditForm] = useState<SkillForm>({ category: "", items: "" });
+  const [editTouched, setEditTouched] = useState<Record<string, boolean>>({});
+  const [editAttempted, setEditAttempted] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  const errors = getSkillErrors(form);
+  const showError = (key: string) => (touched[key] || attempted ? errors[key] : undefined);
+  const editErrors = getSkillErrors(editForm);
+  const showEditError = (key: string) => (editTouched[key] || editAttempted ? editErrors[key] : undefined);
+
   async function add() {
+    setAttempted(true);
+    if (Object.keys(errors).length > 0) return;
     setAdding(true);
     try {
       const skill = await api.skills.create(cvId, {
-        category: form.category,
-        items: form.items.split(",").map((s) => s.trim()).filter(Boolean),
+        category: sanitizeText(form.category),
+        items: splitSanitizedList(form.items),
         orderIndex: skills.length,
       });
       setSkills([...skills, skill]);
       setForm({ category: "", items: "" });
+      setTouched({});
+      setAttempted(false);
     } finally {
       setAdding(false);
     }
@@ -623,6 +838,8 @@ function SkillsSection({ cvId, skills, setSkills }: {
   function startEdit(skill: Skill) {
     setEditingId(skill.id);
     setEditForm({ category: skill.category, items: skill.items.join(", ") });
+    setEditTouched({});
+    setEditAttempted(false);
   }
 
   function cancelEdit() {
@@ -630,12 +847,14 @@ function SkillsSection({ cvId, skills, setSkills }: {
   }
 
   async function saveEdit(skill: Skill) {
+    setEditAttempted(true);
+    if (Object.keys(editErrors).length > 0) return;
     setSavingEdit(true);
     try {
       const updated = await api.skills.update(cvId, skill.id, {
         ...skill,
-        category: editForm.category,
-        items: editForm.items.split(",").map((s) => s.trim()).filter(Boolean),
+        category: sanitizeText(editForm.category),
+        items: splitSanitizedList(editForm.items),
       });
       setSkills(skills.map(s => s.id === skill.id ? updated : s));
       setEditingId(null);
@@ -674,11 +893,15 @@ function SkillsSection({ cvId, skills, setSkills }: {
 
             {editingId === skill.id && (
               <div className="border-t border-border/50 pt-3 space-y-3">
-                <Field label="Category"><Input value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))} /></Field>
-                <Field label="Skills (comma separated)"><Input value={editForm.items} onChange={e => setEditForm(f => ({ ...f, items: e.target.value }))} /></Field>
+                <Field label="Category" error={showEditError("category")}>
+                  <CategorySelect value={editForm.category} onChange={v => setEditForm(f => ({ ...f, category: v }))} />
+                </Field>
+                <Field label="Skills (comma separated)" error={showEditError("items")}>
+                  <Input value={editForm.items} onChange={e => setEditForm(f => ({ ...f, items: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, items: true }))} className={errClass(!!showEditError("items"))} maxLength={500} />
+                </Field>
                 <div className="flex justify-end gap-2">
                   <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
-                  <Button size="sm" onClick={() => saveEdit(skill)} disabled={savingEdit || !editForm.category || !editForm.items} className="gap-1.5">
+                  <Button size="sm" onClick={() => saveEdit(skill)} disabled={savingEdit} className="gap-1.5">
                     {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                     Save
                   </Button>
@@ -692,10 +915,14 @@ function SkillsSection({ cvId, skills, setSkills }: {
       <Card className="border-dashed">
         <CardContent className="pt-4 space-y-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Category</p>
-          <Field label="Category"><Input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="Frontend" /></Field>
-          <Field label="Skills (comma separated)"><Input value={form.items} onChange={e => setForm(f => ({ ...f, items: e.target.value }))} placeholder="React, TypeScript, Tailwind CSS" /></Field>
+          <Field label="Category" error={showError("category")}>
+            <CategorySelect value={form.category} onChange={v => setForm(f => ({ ...f, category: v }))} />
+          </Field>
+          <Field label="Skills (comma separated)" error={showError("items")}>
+            <Input value={form.items} onChange={e => setForm(f => ({ ...f, items: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, items: true }))} placeholder="React, TypeScript, Tailwind CSS" className={errClass(!!showError("items"))} maxLength={500} />
+          </Field>
           <div className="flex justify-end">
-            <Button size="sm" onClick={add} disabled={adding || !form.category || !form.items} className="gap-1.5">
+            <Button size="sm" onClick={add} disabled={adding} className="gap-1.5">
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               Add
             </Button>
@@ -708,33 +935,55 @@ function SkillsSection({ cvId, skills, setSkills }: {
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 
+type ProjectForm = { name: string; description: string; url: string };
+
+function getProjectErrors(f: ProjectForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!sanitizeText(f.name)) errors.name = "Project name is required.";
+  if (!isValidUrl(f.url)) errors.url = "Enter a valid URL.";
+  return errors;
+}
+
 function ProjectsSection({ cvId, projects, setProjects }: {
   cvId: string;
   projects: Project[];
   setProjects: (v: Project[]) => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", url: "" });
+  const [form, setForm] = useState<ProjectForm>({ name: "", description: "", url: "" });
   const [newBullets, setNewBullets] = useState<string[]>([]);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [attempted, setAttempted] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", description: "", url: "" });
+  const [editForm, setEditForm] = useState<ProjectForm>({ name: "", description: "", url: "" });
   const [editBullets, setEditBullets] = useState<string[]>([]);
+  const [editTouched, setEditTouched] = useState<Record<string, boolean>>({});
+  const [editAttempted, setEditAttempted] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  const errors = getProjectErrors(form);
+  const showError = (key: string) => (touched[key] || attempted ? errors[key] : undefined);
+  const editErrors = getProjectErrors(editForm);
+  const showEditError = (key: string) => (editTouched[key] || editAttempted ? editErrors[key] : undefined);
+
   async function add() {
+    setAttempted(true);
+    if (Object.keys(errors).length > 0) return;
     setAdding(true);
     try {
       const proj = await api.projects.create(cvId, {
-        name: form.name,
-        description: form.description || undefined,
-        url: form.url || undefined,
+        name: sanitizeText(form.name),
+        description: sanitizeText(form.description) || undefined,
+        url: sanitizeText(form.url) || undefined,
         bullets: newBullets,
         orderIndex: projects.length,
       });
       setProjects([...projects, proj]);
       setForm({ name: "", description: "", url: "" });
       setNewBullets([]);
+      setTouched({});
+      setAttempted(false);
     } finally {
       setAdding(false);
     }
@@ -750,6 +999,8 @@ function ProjectsSection({ cvId, projects, setProjects }: {
     setEditingId(proj.id);
     setEditForm({ name: proj.name, description: proj.description ?? "", url: proj.url ?? "" });
     setEditBullets(proj.bullets);
+    setEditTouched({});
+    setEditAttempted(false);
   }
 
   function cancelEdit() {
@@ -757,13 +1008,15 @@ function ProjectsSection({ cvId, projects, setProjects }: {
   }
 
   async function saveEdit(proj: Project) {
+    setEditAttempted(true);
+    if (Object.keys(editErrors).length > 0) return;
     setSavingEdit(true);
     try {
       const updated = await api.projects.update(cvId, proj.id, {
         ...proj,
-        name: editForm.name,
-        description: editForm.description || undefined,
-        url: editForm.url || undefined,
+        name: sanitizeText(editForm.name),
+        description: sanitizeText(editForm.description) || undefined,
+        url: sanitizeText(editForm.url) || undefined,
         bullets: editBullets,
       });
       setProjects(projects.map(p => p.id === proj.id ? updated : p));
@@ -804,9 +1057,13 @@ function ProjectsSection({ cvId, projects, setProjects }: {
 
             {editingId === proj.id && (
               <div className="border-t border-border/50 pt-3 space-y-4">
-                <Field label="Project Name"><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></Field>
-                <Field label="Description"><Input value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} /></Field>
-                <Field label="URL"><Input value={editForm.url} onChange={e => setEditForm(f => ({ ...f, url: e.target.value }))} /></Field>
+                <Field label="Project Name" error={showEditError("name")}>
+                  <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, name: true }))} className={errClass(!!showEditError("name"))} maxLength={200} />
+                </Field>
+                <Field label="Description"><Input value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} maxLength={500} /></Field>
+                <Field label="URL" error={showEditError("url")}>
+                  <Input value={editForm.url} onChange={e => setEditForm(f => ({ ...f, url: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, url: true }))} className={errClass(!!showEditError("url"))} maxLength={300} />
+                </Field>
                 <BulletEditor
                   placeholder="Describe a feature or achievement..."
                   bullets={editBullets}
@@ -815,7 +1072,7 @@ function ProjectsSection({ cvId, projects, setProjects }: {
                 />
                 <div className="flex justify-end gap-2">
                   <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
-                  <Button size="sm" onClick={() => saveEdit(proj)} disabled={savingEdit || !editForm.name} className="gap-1.5">
+                  <Button size="sm" onClick={() => saveEdit(proj)} disabled={savingEdit} className="gap-1.5">
                     {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                     Save
                   </Button>
@@ -829,9 +1086,13 @@ function ProjectsSection({ cvId, projects, setProjects }: {
       <Card className="border-dashed">
         <CardContent className="pt-4 space-y-4">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Project</p>
-          <Field label="Project Name"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="My Awesome App" /></Field>
-          <Field label="Description"><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Short description" /></Field>
-          <Field label="URL"><Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="github.com/you/project" /></Field>
+          <Field label="Project Name" error={showError("name")}>
+            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, name: true }))} placeholder="My Awesome App" className={errClass(!!showError("name"))} maxLength={200} />
+          </Field>
+          <Field label="Description"><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Short description" maxLength={500} /></Field>
+          <Field label="URL" error={showError("url")}>
+            <Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, url: true }))} placeholder="github.com/you/project" className={errClass(!!showError("url"))} maxLength={300} />
+          </Field>
           <div className="border-t border-border/40 pt-3">
             <BulletEditor
               placeholder="Describe a feature or achievement..."
@@ -841,7 +1102,7 @@ function ProjectsSection({ cvId, projects, setProjects }: {
             />
           </div>
           <div className="flex justify-center">
-            <Button size="sm" onClick={add} disabled={adding || !form.name} className="gap-1.5">
+            <Button size="sm" onClick={add} disabled={adding} className="gap-1.5">
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               Save
             </Button>
@@ -854,31 +1115,58 @@ function ProjectsSection({ cvId, projects, setProjects }: {
 
 // ── Certifications ────────────────────────────────────────────────────────────
 
+type CertificationForm = { name: string; issuer: string; issueDate: string; expiryDate: string; url: string };
+
+function getCertificationErrors(f: CertificationForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!sanitizeText(f.name)) errors.name = "Name is required.";
+  if (!sanitizeText(f.issuer)) errors.issuer = "Issuer is required.";
+  if (!f.issueDate) errors.issueDate = "Issue date is required.";
+  else if (!isValidDate(f.issueDate)) errors.issueDate = "Enter a valid date.";
+  if (f.expiryDate && !isValidDate(f.expiryDate)) errors.expiryDate = "Enter a valid date.";
+  else if (f.expiryDate && !isDateOnOrAfter(f.issueDate, f.expiryDate)) errors.expiryDate = "Expiry date must be after the issue date.";
+  if (!isValidUrl(f.url)) errors.url = "Enter a valid URL.";
+  return errors;
+}
+
 function CertificationsSection({ cvId, certifications, setCertifications }: {
   cvId: string;
   certifications: Certification[];
   setCertifications: (v: Certification[]) => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ name: "", issuer: "", issueDate: "", expiryDate: "", url: "" });
+  const [form, setForm] = useState<CertificationForm>({ name: "", issuer: "", issueDate: "", expiryDate: "", url: "" });
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [attempted, setAttempted] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", issuer: "", issueDate: "", expiryDate: "", url: "" });
+  const [editForm, setEditForm] = useState<CertificationForm>({ name: "", issuer: "", issueDate: "", expiryDate: "", url: "" });
+  const [editTouched, setEditTouched] = useState<Record<string, boolean>>({});
+  const [editAttempted, setEditAttempted] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  const errors = getCertificationErrors(form);
+  const showError = (key: string) => (touched[key] || attempted ? errors[key] : undefined);
+  const editErrors = getCertificationErrors(editForm);
+  const showEditError = (key: string) => (editTouched[key] || editAttempted ? editErrors[key] : undefined);
+
   async function add() {
+    setAttempted(true);
+    if (Object.keys(errors).length > 0) return;
     setAdding(true);
     try {
       const cert = await api.certifications.create(cvId, {
-        name: form.name,
-        issuer: form.issuer,
+        name: sanitizeText(form.name),
+        issuer: sanitizeText(form.issuer),
         issueDate: form.issueDate,
         expiryDate: form.expiryDate || undefined,
-        url: form.url || undefined,
+        url: sanitizeText(form.url) || undefined,
         orderIndex: certifications.length,
       });
       setCertifications([...certifications, cert]);
       setForm({ name: "", issuer: "", issueDate: "", expiryDate: "", url: "" });
+      setTouched({});
+      setAttempted(false);
     } finally {
       setAdding(false);
     }
@@ -893,6 +1181,8 @@ function CertificationsSection({ cvId, certifications, setCertifications }: {
   function startEdit(cert: Certification) {
     setEditingId(cert.id);
     setEditForm({ name: cert.name, issuer: cert.issuer, issueDate: cert.issueDate, expiryDate: cert.expiryDate ?? "", url: cert.url ?? "" });
+    setEditTouched({});
+    setEditAttempted(false);
   }
 
   function cancelEdit() {
@@ -900,15 +1190,17 @@ function CertificationsSection({ cvId, certifications, setCertifications }: {
   }
 
   async function saveEdit(cert: Certification) {
+    setEditAttempted(true);
+    if (Object.keys(editErrors).length > 0) return;
     setSavingEdit(true);
     try {
       const updated = await api.certifications.update(cvId, cert.id, {
         ...cert,
-        name: editForm.name,
-        issuer: editForm.issuer,
+        name: sanitizeText(editForm.name),
+        issuer: sanitizeText(editForm.issuer),
         issueDate: editForm.issueDate,
         expiryDate: editForm.expiryDate || undefined,
-        url: editForm.url || undefined,
+        url: sanitizeText(editForm.url) || undefined,
       });
       setCertifications(certifications.map(c => c.id === cert.id ? updated : c));
       setEditingId(null);
@@ -949,15 +1241,25 @@ function CertificationsSection({ cvId, certifications, setCertifications }: {
             {editingId === cert.id && (
               <div className="border-t border-border/50 pt-3 space-y-3">
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Name" className="col-span-2"><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></Field>
-                  <Field label="Issuer"><Input value={editForm.issuer} onChange={e => setEditForm(f => ({ ...f, issuer: e.target.value }))} /></Field>
-                  <Field label="URL"><Input value={editForm.url} onChange={e => setEditForm(f => ({ ...f, url: e.target.value }))} /></Field>
-                  <Field label="Issue Date"><Input value={editForm.issueDate} onChange={e => setEditForm(f => ({ ...f, issueDate: e.target.value }))} /></Field>
-                  <Field label="Expiry Date"><Input value={editForm.expiryDate} onChange={e => setEditForm(f => ({ ...f, expiryDate: e.target.value }))} placeholder="Leave blank if no expiry" /></Field>
+                  <Field label="Name" className="col-span-2" error={showEditError("name")}>
+                    <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, name: true }))} className={errClass(!!showEditError("name"))} maxLength={200} />
+                  </Field>
+                  <Field label="Issuer" error={showEditError("issuer")}>
+                    <Input value={editForm.issuer} onChange={e => setEditForm(f => ({ ...f, issuer: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, issuer: true }))} className={errClass(!!showEditError("issuer"))} maxLength={200} />
+                  </Field>
+                  <Field label="URL" error={showEditError("url")}>
+                    <Input value={editForm.url} onChange={e => setEditForm(f => ({ ...f, url: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, url: true }))} className={errClass(!!showEditError("url"))} maxLength={300} />
+                  </Field>
+                  <Field label="Issue Date" error={showEditError("issueDate")}>
+                    <Input type="date" value={editForm.issueDate} onChange={e => setEditForm(f => ({ ...f, issueDate: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, issueDate: true }))} className={errClass(!!showEditError("issueDate"))} />
+                  </Field>
+                  <Field label="Expiry Date" error={showEditError("expiryDate")}>
+                    <Input type="date" value={editForm.expiryDate} onChange={e => setEditForm(f => ({ ...f, expiryDate: e.target.value }))} onBlur={() => setEditTouched(t => ({ ...t, expiryDate: true }))} className={errClass(!!showEditError("expiryDate"))} />
+                  </Field>
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
-                  <Button size="sm" onClick={() => saveEdit(cert)} disabled={savingEdit || !editForm.name || !editForm.issuer || !editForm.issueDate} className="gap-1.5">
+                  <Button size="sm" onClick={() => saveEdit(cert)} disabled={savingEdit} className="gap-1.5">
                     {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                     Save
                   </Button>
@@ -972,14 +1274,24 @@ function CertificationsSection({ cvId, certifications, setCertifications }: {
         <CardContent className="pt-4 space-y-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Certification</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Name" className="col-span-2"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="AWS Solutions Architect" /></Field>
-            <Field label="Issuer"><Input value={form.issuer} onChange={e => setForm(f => ({ ...f, issuer: e.target.value }))} placeholder="Amazon Web Services" /></Field>
-            <Field label="URL"><Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="credly.com/badges/..." /></Field>
-            <Field label="Issue Date"><Input value={form.issueDate} onChange={e => setForm(f => ({ ...f, issueDate: e.target.value }))} placeholder="2023-06-01" /></Field>
-            <Field label="Expiry Date"><Input value={form.expiryDate} onChange={e => setForm(f => ({ ...f, expiryDate: e.target.value }))} placeholder="Leave blank if no expiry" /></Field>
+            <Field label="Name" className="col-span-2" error={showError("name")}>
+              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, name: true }))} placeholder="AWS Solutions Architect" className={errClass(!!showError("name"))} maxLength={200} />
+            </Field>
+            <Field label="Issuer" error={showError("issuer")}>
+              <Input value={form.issuer} onChange={e => setForm(f => ({ ...f, issuer: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, issuer: true }))} placeholder="Amazon Web Services" className={errClass(!!showError("issuer"))} maxLength={200} />
+            </Field>
+            <Field label="URL" error={showError("url")}>
+              <Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, url: true }))} placeholder="credly.com/badges/..." className={errClass(!!showError("url"))} maxLength={300} />
+            </Field>
+            <Field label="Issue Date" error={showError("issueDate")}>
+              <Input type="date" value={form.issueDate} onChange={e => setForm(f => ({ ...f, issueDate: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, issueDate: true }))} className={errClass(!!showError("issueDate"))} />
+            </Field>
+            <Field label="Expiry Date" error={showError("expiryDate")}>
+              <Input type="date" value={form.expiryDate} onChange={e => setForm(f => ({ ...f, expiryDate: e.target.value }))} onBlur={() => setTouched(t => ({ ...t, expiryDate: true }))} className={errClass(!!showError("expiryDate"))} />
+            </Field>
           </div>
           <div className="flex justify-end">
-            <Button size="sm" onClick={add} disabled={adding || !form.name || !form.issuer || !form.issueDate} className="gap-1.5">
+            <Button size="sm" onClick={add} disabled={adding} className="gap-1.5">
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               Add
             </Button>
@@ -992,6 +1304,8 @@ function CertificationsSection({ cvId, certifications, setCertifications }: {
 
 // ── Achievements ──────────────────────────────────────────────────────────────
 
+const ACHIEVEMENT_MAX_LENGTH = 500;
+
 function AchievementsSection({ cvId, achievements, setAchievements }: {
   cvId: string;
   achievements: Achievement[];
@@ -999,21 +1313,28 @@ function AchievementsSection({ cvId, achievements, setAchievements }: {
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
+  const [attempted, setAttempted] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [editAttempted, setEditAttempted] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  const error = attempted && !sanitizeText(draft) ? "Description is required." : undefined;
+  const editError = editAttempted && !sanitizeText(editDraft) ? "Description is required." : undefined;
+
   async function add() {
-    if (!draft.trim()) return;
+    setAttempted(true);
+    if (!sanitizeText(draft)) return;
     setAdding(true);
     try {
       const ach = await api.achievements.create(cvId, {
-        description: draft.trim(),
+        description: sanitizeText(draft),
         orderIndex: achievements.length,
       });
       setAchievements([...achievements, ach]);
       setDraft("");
+      setAttempted(false);
     } finally {
       setAdding(false);
     }
@@ -1028,6 +1349,7 @@ function AchievementsSection({ cvId, achievements, setAchievements }: {
   function startEdit(ach: Achievement) {
     setEditingId(ach.id);
     setEditDraft(ach.description);
+    setEditAttempted(false);
   }
 
   function cancelEdit() {
@@ -1035,10 +1357,11 @@ function AchievementsSection({ cvId, achievements, setAchievements }: {
   }
 
   async function saveEdit(ach: Achievement) {
-    if (!editDraft.trim()) return;
+    setEditAttempted(true);
+    if (!sanitizeText(editDraft)) return;
     setSavingEdit(true);
     try {
-      const updated = await api.achievements.update(cvId, ach.id, { ...ach, description: editDraft.trim() });
+      const updated = await api.achievements.update(cvId, ach.id, { ...ach, description: sanitizeText(editDraft) });
       setAchievements(achievements.map(a => a.id === ach.id ? updated : a));
       setEditingId(null);
     } finally {
@@ -1073,12 +1396,12 @@ function AchievementsSection({ cvId, achievements, setAchievements }: {
 
             {editingId === ach.id && (
               <div className="border-t border-border/50 pt-3 space-y-3">
-                <Field label="Description">
-                  <Textarea value={editDraft} onChange={e => setEditDraft(e.target.value)} rows={2} />
+                <Field label="Description" error={editError}>
+                  <Textarea value={editDraft} onChange={e => setEditDraft(e.target.value)} rows={2} maxLength={ACHIEVEMENT_MAX_LENGTH} className={errClass(!!editError)} />
                 </Field>
                 <div className="flex justify-end gap-2">
                   <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
-                  <Button size="sm" onClick={() => saveEdit(ach)} disabled={savingEdit || !editDraft.trim()} className="gap-1.5">
+                  <Button size="sm" onClick={() => saveEdit(ach)} disabled={savingEdit} className="gap-1.5">
                     {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                     Save
                   </Button>
@@ -1092,16 +1415,18 @@ function AchievementsSection({ cvId, achievements, setAchievements }: {
       <Card className="border-dashed">
         <CardContent className="pt-4 space-y-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Achievement</p>
-          <Field label="Description">
+          <Field label="Description" error={error}>
             <Textarea
               value={draft}
               onChange={e => setDraft(e.target.value)}
               placeholder="e.g. Won 1st place at HackZA 2023 hackathon"
               rows={2}
+              maxLength={ACHIEVEMENT_MAX_LENGTH}
+              className={errClass(!!error)}
             />
           </Field>
           <div className="flex justify-end">
-            <Button size="sm" onClick={add} disabled={adding || !draft.trim()} className="gap-1.5">
+            <Button size="sm" onClick={add} disabled={adding} className="gap-1.5">
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               Add
             </Button>
@@ -1114,11 +1439,12 @@ function AchievementsSection({ cvId, achievements, setAchievements }: {
 
 // ── Shared ────────────────────────────────────────────────────────────────────
 
-function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+function Field({ label, children, className, error }: { label: string; children: React.ReactNode; className?: string; error?: string }) {
   return (
     <div className={`space-y-1.5 ${className ?? ""}`}>
       <Label className="text-xs">{label}</Label>
       {children}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }
