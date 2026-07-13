@@ -273,7 +273,11 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ company: "", role: "", location: "", startDate: "", endDate: "" });
   const [newBullets, setNewBullets] = useState<string[]>([]);
-  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ company: "", role: "", location: "", startDate: "", endDate: "" });
+  const [editBullets, setEditBullets] = useState<string[]>([]);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   async function add() {
     setAdding(true);
@@ -299,12 +303,37 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
   async function remove(id: string) {
     await api.workExperience.delete(cvId, id).catch(() => null);
     setExperiences(experiences.filter((e) => e.id !== id));
-    if (expanded === id) setExpanded(null);
+    if (editingId === id) setEditingId(null);
   }
 
-  async function updateBullets(exp: WorkExperience, bullets: string[]) {
-    const updated = await api.workExperience.update(cvId, exp.id, { ...exp, bullets });
-    setExperiences(experiences.map(e => e.id === exp.id ? updated : e));
+  function startEdit(exp: WorkExperience) {
+    setEditingId(exp.id);
+    setEditForm({ company: exp.company, role: exp.role, location: exp.location ?? "", startDate: exp.startDate, endDate: exp.endDate ?? "" });
+    setEditBullets(exp.bullets);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(exp: WorkExperience) {
+    setSavingEdit(true);
+    try {
+      const updated = await api.workExperience.update(cvId, exp.id, {
+        ...exp,
+        company: editForm.company,
+        role: editForm.role,
+        location: editForm.location || undefined,
+        startDate: editForm.startDate,
+        endDate: editForm.endDate || undefined,
+        isCurrent: !editForm.endDate,
+        bullets: editBullets,
+      });
+      setExperiences(experiences.map(e => e.id === exp.id ? updated : e));
+      setEditingId(null);
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   return (
@@ -327,9 +356,9 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
                 <Button
                   variant="ghost" size="icon"
                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  onClick={() => setExpanded(expanded === exp.id ? null : exp.id)}
+                  onClick={() => editingId === exp.id ? cancelEdit() : startEdit(exp)}
                 >
-                  {expanded === exp.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  {editingId === exp.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(exp.id)}>
                   <Trash2 className="h-3.5 w-3.5" />
@@ -337,13 +366,28 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
               </div>
             </div>
 
-            {expanded === exp.id && (
-              <div className="border-t border-border/50 pt-3">
+            {editingId === exp.id && (
+              <div className="border-t border-border/50 pt-3 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Company"><Input value={editForm.company} onChange={e => setEditForm(f => ({ ...f, company: e.target.value }))} /></Field>
+                  <Field label="Role"><Input value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} /></Field>
+                  <Field label="Location"><Input value={editForm.location} onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))} /></Field>
+                  <div />
+                  <Field label="Start Date"><Input value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} /></Field>
+                  <Field label="End Date"><Input value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} placeholder="Leave blank if current" /></Field>
+                </div>
                 <BulletEditor
-                  bullets={exp.bullets}
-                  onAdd={text => updateBullets(exp, [...exp.bullets, text])}
-                  onRemove={i => updateBullets(exp, exp.bullets.filter((_, idx) => idx !== i))}
+                  bullets={editBullets}
+                  onAdd={text => setEditBullets(b => [...b, text])}
+                  onRemove={i => setEditBullets(b => b.filter((_, idx) => idx !== i))}
                 />
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
+                  <Button size="sm" onClick={() => saveEdit(exp)} disabled={savingEdit || !editForm.company || !editForm.role || !editForm.startDate} className="gap-1.5">
+                    {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
@@ -368,10 +412,10 @@ function ExperienceSection({ cvId, experiences, setExperiences }: {
               onRemove={i => setNewBullets(b => b.filter((_, idx) => idx !== i))}
             />
           </div>
-          <div className="flex justify-end">
+          <div className="flex justify-center">
             <Button size="sm" onClick={add} disabled={adding || !form.company || !form.role || !form.startDate} className="gap-1.5">
-              {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-              Add
+              {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Save
             </Button>
           </div>
         </CardContent>
@@ -390,7 +434,11 @@ function EducationSection({ cvId, educations, setEducations }: {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ institution: "", degree: "", field: "", startDate: "", endDate: "" });
   const [newAchievements, setNewAchievements] = useState<string[]>([]);
-  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ institution: "", degree: "", field: "", startDate: "", endDate: "" });
+  const [editAchievements, setEditAchievements] = useState<string[]>([]);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   async function add() {
     setAdding(true);
@@ -416,12 +464,37 @@ function EducationSection({ cvId, educations, setEducations }: {
   async function remove(id: string) {
     await api.education.delete(cvId, id).catch(() => null);
     setEducations(educations.filter((e) => e.id !== id));
-    if (expanded === id) setExpanded(null);
+    if (editingId === id) setEditingId(null);
   }
 
-  async function updateAchievements(edu: Education, achievements: string[]) {
-    const updated = await api.education.update(cvId, edu.id, { ...edu, achievements });
-    setEducations(educations.map(e => e.id === edu.id ? updated : e));
+  function startEdit(edu: Education) {
+    setEditingId(edu.id);
+    setEditForm({ institution: edu.institution, degree: edu.degree, field: edu.field, startDate: edu.startDate, endDate: edu.endDate ?? "" });
+    setEditAchievements(edu.achievements);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(edu: Education) {
+    setSavingEdit(true);
+    try {
+      const updated = await api.education.update(cvId, edu.id, {
+        ...edu,
+        institution: editForm.institution,
+        degree: editForm.degree,
+        field: editForm.field,
+        startDate: editForm.startDate,
+        endDate: editForm.endDate || undefined,
+        isCurrent: !editForm.endDate,
+        achievements: editAchievements,
+      });
+      setEducations(educations.map(e => e.id === edu.id ? updated : e));
+      setEditingId(null);
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   return (
@@ -442,9 +515,9 @@ function EducationSection({ cvId, educations, setEducations }: {
                 <Button
                   variant="ghost" size="icon"
                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  onClick={() => setExpanded(expanded === edu.id ? null : edu.id)}
+                  onClick={() => editingId === edu.id ? cancelEdit() : startEdit(edu)}
                 >
-                  {expanded === edu.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  {editingId === edu.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(edu.id)}>
                   <Trash2 className="h-3.5 w-3.5" />
@@ -452,15 +525,29 @@ function EducationSection({ cvId, educations, setEducations }: {
               </div>
             </div>
 
-            {expanded === edu.id && (
-              <div className="border-t border-border/50 pt-3">
+            {editingId === edu.id && (
+              <div className="border-t border-border/50 pt-3 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Institution" className="col-span-2"><Input value={editForm.institution} onChange={e => setEditForm(f => ({ ...f, institution: e.target.value }))} /></Field>
+                  <Field label="Degree"><Input value={editForm.degree} onChange={e => setEditForm(f => ({ ...f, degree: e.target.value }))} /></Field>
+                  <Field label="Field"><Input value={editForm.field} onChange={e => setEditForm(f => ({ ...f, field: e.target.value }))} /></Field>
+                  <Field label="Start Date"><Input value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} /></Field>
+                  <Field label="End Date"><Input value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} placeholder="Leave blank if current" /></Field>
+                </div>
                 <BulletEditor
                   label="Achievements / Notes"
                   placeholder="e.g. Dean's list, relevant coursework..."
-                  bullets={edu.achievements}
-                  onAdd={text => updateAchievements(edu, [...edu.achievements, text])}
-                  onRemove={i => updateAchievements(edu, edu.achievements.filter((_, idx) => idx !== i))}
+                  bullets={editAchievements}
+                  onAdd={text => setEditAchievements(a => [...a, text])}
+                  onRemove={i => setEditAchievements(a => a.filter((_, idx) => idx !== i))}
                 />
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
+                  <Button size="sm" onClick={() => saveEdit(edu)} disabled={savingEdit || !editForm.institution || !editForm.startDate} className="gap-1.5">
+                    {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
@@ -486,10 +573,10 @@ function EducationSection({ cvId, educations, setEducations }: {
               onRemove={i => setNewAchievements(a => a.filter((_, idx) => idx !== i))}
             />
           </div>
-          <div className="flex justify-end">
+          <div className="flex justify-center">
             <Button size="sm" onClick={add} disabled={adding || !form.institution || !form.startDate} className="gap-1.5">
-              {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-              Add
+              {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Save
             </Button>
           </div>
         </CardContent>
@@ -507,6 +594,10 @@ function SkillsSection({ cvId, skills, setSkills }: {
 }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ category: "", items: "" });
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ category: "", items: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   async function add() {
     setAdding(true);
@@ -526,6 +617,31 @@ function SkillsSection({ cvId, skills, setSkills }: {
   async function remove(id: string) {
     await api.skills.delete(cvId, id).catch(() => null);
     setSkills(skills.filter((s) => s.id !== id));
+    if (editingId === id) setEditingId(null);
+  }
+
+  function startEdit(skill: Skill) {
+    setEditingId(skill.id);
+    setEditForm({ category: skill.category, items: skill.items.join(", ") });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(skill: Skill) {
+    setSavingEdit(true);
+    try {
+      const updated = await api.skills.update(cvId, skill.id, {
+        ...skill,
+        category: editForm.category,
+        items: editForm.items.split(",").map((s) => s.trim()).filter(Boolean),
+      });
+      setSkills(skills.map(s => s.id === skill.id ? updated : s));
+      setEditingId(null);
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   return (
@@ -536,14 +652,39 @@ function SkillsSection({ cvId, skills, setSkills }: {
 
       {skills.map((skill) => (
         <Card key={skill.id}>
-          <CardContent className="pt-4 flex items-start justify-between gap-4">
-            <div>
-              <p className="font-medium text-sm">{skill.category}</p>
-              <p className="text-xs text-muted-foreground mt-1">{skill.items.join(", ")}</p>
+          <CardContent className="pt-4 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="font-medium text-sm">{skill.category}</p>
+                <p className="text-xs text-muted-foreground mt-1">{skill.items.join(", ")}</p>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost" size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={() => editingId === skill.id ? cancelEdit() : startEdit(skill)}
+                >
+                  {editingId === skill.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(skill.id)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(skill.id)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+
+            {editingId === skill.id && (
+              <div className="border-t border-border/50 pt-3 space-y-3">
+                <Field label="Category"><Input value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))} /></Field>
+                <Field label="Skills (comma separated)"><Input value={editForm.items} onChange={e => setEditForm(f => ({ ...f, items: e.target.value }))} /></Field>
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
+                  <Button size="sm" onClick={() => saveEdit(skill)} disabled={savingEdit || !editForm.category || !editForm.items} className="gap-1.5">
+                    {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       ))}
@@ -575,7 +716,11 @@ function ProjectsSection({ cvId, projects, setProjects }: {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", url: "" });
   const [newBullets, setNewBullets] = useState<string[]>([]);
-  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", description: "", url: "" });
+  const [editBullets, setEditBullets] = useState<string[]>([]);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   async function add() {
     setAdding(true);
@@ -598,12 +743,34 @@ function ProjectsSection({ cvId, projects, setProjects }: {
   async function remove(id: string) {
     await api.projects.delete(cvId, id).catch(() => null);
     setProjects(projects.filter((p) => p.id !== id));
-    if (expanded === id) setExpanded(null);
+    if (editingId === id) setEditingId(null);
   }
 
-  async function updateBullets(proj: Project, bullets: string[]) {
-    const updated = await api.projects.update(cvId, proj.id, { ...proj, bullets });
-    setProjects(projects.map(p => p.id === proj.id ? updated : p));
+  function startEdit(proj: Project) {
+    setEditingId(proj.id);
+    setEditForm({ name: proj.name, description: proj.description ?? "", url: proj.url ?? "" });
+    setEditBullets(proj.bullets);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(proj: Project) {
+    setSavingEdit(true);
+    try {
+      const updated = await api.projects.update(cvId, proj.id, {
+        ...proj,
+        name: editForm.name,
+        description: editForm.description || undefined,
+        url: editForm.url || undefined,
+        bullets: editBullets,
+      });
+      setProjects(projects.map(p => p.id === proj.id ? updated : p));
+      setEditingId(null);
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   return (
@@ -625,9 +792,9 @@ function ProjectsSection({ cvId, projects, setProjects }: {
                 <Button
                   variant="ghost" size="icon"
                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  onClick={() => setExpanded(expanded === proj.id ? null : proj.id)}
+                  onClick={() => editingId === proj.id ? cancelEdit() : startEdit(proj)}
                 >
-                  {expanded === proj.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  {editingId === proj.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(proj.id)}>
                   <Trash2 className="h-3.5 w-3.5" />
@@ -635,14 +802,24 @@ function ProjectsSection({ cvId, projects, setProjects }: {
               </div>
             </div>
 
-            {expanded === proj.id && (
-              <div className="border-t border-border/50 pt-3">
+            {editingId === proj.id && (
+              <div className="border-t border-border/50 pt-3 space-y-4">
+                <Field label="Project Name"><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></Field>
+                <Field label="Description"><Input value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} /></Field>
+                <Field label="URL"><Input value={editForm.url} onChange={e => setEditForm(f => ({ ...f, url: e.target.value }))} /></Field>
                 <BulletEditor
                   placeholder="Describe a feature or achievement..."
-                  bullets={proj.bullets}
-                  onAdd={text => updateBullets(proj, [...proj.bullets, text])}
-                  onRemove={i => updateBullets(proj, proj.bullets.filter((_, idx) => idx !== i))}
+                  bullets={editBullets}
+                  onAdd={text => setEditBullets(b => [...b, text])}
+                  onRemove={i => setEditBullets(b => b.filter((_, idx) => idx !== i))}
                 />
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
+                  <Button size="sm" onClick={() => saveEdit(proj)} disabled={savingEdit || !editForm.name} className="gap-1.5">
+                    {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
@@ -663,10 +840,10 @@ function ProjectsSection({ cvId, projects, setProjects }: {
               onRemove={i => setNewBullets(b => b.filter((_, idx) => idx !== i))}
             />
           </div>
-          <div className="flex justify-end">
+          <div className="flex justify-center">
             <Button size="sm" onClick={add} disabled={adding || !form.name} className="gap-1.5">
-              {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-              Add
+              {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Save
             </Button>
           </div>
         </CardContent>
@@ -684,6 +861,10 @@ function CertificationsSection({ cvId, certifications, setCertifications }: {
 }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: "", issuer: "", issueDate: "", expiryDate: "", url: "" });
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", issuer: "", issueDate: "", expiryDate: "", url: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   async function add() {
     setAdding(true);
@@ -706,6 +887,34 @@ function CertificationsSection({ cvId, certifications, setCertifications }: {
   async function remove(id: string) {
     await api.certifications.delete(cvId, id).catch(() => null);
     setCertifications(certifications.filter((c) => c.id !== id));
+    if (editingId === id) setEditingId(null);
+  }
+
+  function startEdit(cert: Certification) {
+    setEditingId(cert.id);
+    setEditForm({ name: cert.name, issuer: cert.issuer, issueDate: cert.issueDate, expiryDate: cert.expiryDate ?? "", url: cert.url ?? "" });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(cert: Certification) {
+    setSavingEdit(true);
+    try {
+      const updated = await api.certifications.update(cvId, cert.id, {
+        ...cert,
+        name: editForm.name,
+        issuer: editForm.issuer,
+        issueDate: editForm.issueDate,
+        expiryDate: editForm.expiryDate || undefined,
+        url: editForm.url || undefined,
+      });
+      setCertifications(certifications.map(c => c.id === cert.id ? updated : c));
+      setEditingId(null);
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   return (
@@ -716,15 +925,45 @@ function CertificationsSection({ cvId, certifications, setCertifications }: {
 
       {certifications.map((cert) => (
         <Card key={cert.id}>
-          <CardContent className="pt-4 flex items-start justify-between gap-4">
-            <div>
-              <p className="font-medium text-sm">{cert.name}</p>
-              <p className="text-xs text-muted-foreground">{cert.issuer} · {cert.issueDate}{cert.expiryDate ? ` – ${cert.expiryDate}` : ""}</p>
-              {cert.url && <p className="text-xs text-primary mt-0.5">{cert.url}</p>}
+          <CardContent className="pt-4 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="font-medium text-sm">{cert.name}</p>
+                <p className="text-xs text-muted-foreground">{cert.issuer} · {cert.issueDate}{cert.expiryDate ? ` – ${cert.expiryDate}` : ""}</p>
+                {cert.url && <p className="text-xs text-primary mt-0.5">{cert.url}</p>}
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost" size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={() => editingId === cert.id ? cancelEdit() : startEdit(cert)}
+                >
+                  {editingId === cert.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(cert.id)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(cert.id)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+
+            {editingId === cert.id && (
+              <div className="border-t border-border/50 pt-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Name" className="col-span-2"><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></Field>
+                  <Field label="Issuer"><Input value={editForm.issuer} onChange={e => setEditForm(f => ({ ...f, issuer: e.target.value }))} /></Field>
+                  <Field label="URL"><Input value={editForm.url} onChange={e => setEditForm(f => ({ ...f, url: e.target.value }))} /></Field>
+                  <Field label="Issue Date"><Input value={editForm.issueDate} onChange={e => setEditForm(f => ({ ...f, issueDate: e.target.value }))} /></Field>
+                  <Field label="Expiry Date"><Input value={editForm.expiryDate} onChange={e => setEditForm(f => ({ ...f, expiryDate: e.target.value }))} placeholder="Leave blank if no expiry" /></Field>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
+                  <Button size="sm" onClick={() => saveEdit(cert)} disabled={savingEdit || !editForm.name || !editForm.issuer || !editForm.issueDate} className="gap-1.5">
+                    {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       ))}
@@ -761,6 +1000,10 @@ function AchievementsSection({ cvId, achievements, setAchievements }: {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
   async function add() {
     if (!draft.trim()) return;
     setAdding(true);
@@ -779,6 +1022,28 @@ function AchievementsSection({ cvId, achievements, setAchievements }: {
   async function remove(id: string) {
     await api.achievements.delete(cvId, id).catch(() => null);
     setAchievements(achievements.filter((a) => a.id !== id));
+    if (editingId === id) setEditingId(null);
+  }
+
+  function startEdit(ach: Achievement) {
+    setEditingId(ach.id);
+    setEditDraft(ach.description);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(ach: Achievement) {
+    if (!editDraft.trim()) return;
+    setSavingEdit(true);
+    try {
+      const updated = await api.achievements.update(cvId, ach.id, { ...ach, description: editDraft.trim() });
+      setAchievements(achievements.map(a => a.id === ach.id ? updated : a));
+      setEditingId(null);
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   return (
@@ -789,11 +1054,37 @@ function AchievementsSection({ cvId, achievements, setAchievements }: {
 
       {achievements.map((ach) => (
         <Card key={ach.id}>
-          <CardContent className="pt-4 flex items-start justify-between gap-4">
-            <p className="text-sm flex-1">{ach.description}</p>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0" onClick={() => remove(ach.id)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+          <CardContent className="pt-4 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <p className="text-sm flex-1">{ach.description}</p>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  variant="ghost" size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={() => editingId === ach.id ? cancelEdit() : startEdit(ach)}
+                >
+                  {editingId === ach.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => remove(ach.id)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            {editingId === ach.id && (
+              <div className="border-t border-border/50 pt-3 space-y-3">
+                <Field label="Description">
+                  <Textarea value={editDraft} onChange={e => setEditDraft(e.target.value)} rows={2} />
+                </Field>
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={cancelEdit}>Cancel</Button>
+                  <Button size="sm" onClick={() => saveEdit(ach)} disabled={savingEdit || !editDraft.trim()} className="gap-1.5">
+                    {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       ))}

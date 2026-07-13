@@ -122,6 +122,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
+    update: (cvId: string, id: string, data: Partial<Certification>) =>
+      request<Certification>(`/cvs/${cvId}/certifications/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
     delete: (cvId: string, id: string) =>
       request<void>(`/cvs/${cvId}/certifications/${id}`, { method: "DELETE" }),
   },
@@ -130,6 +135,11 @@ export const api = {
     create: (cvId: string, data: Partial<Achievement>) =>
       request<Achievement>(`/cvs/${cvId}/achievements`, {
         method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: (cvId: string, id: string, data: Partial<Achievement>) =>
+      request<Achievement>(`/cvs/${cvId}/achievements/${id}`, {
+        method: "PUT",
         body: JSON.stringify(data),
       }),
     delete: (cvId: string, id: string) =>
