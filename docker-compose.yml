@@ -59,6 +59,8 @@ services:
         condition: service_healthy
     environment:
       BACKEND_URL: http://api:5133
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: change-me-in-production-use-openssl-rand-base64-32
     ports:
       - "3000:3000"
 

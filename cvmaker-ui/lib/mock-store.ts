@@ -1,7 +1,7 @@
 // In-memory store persisted across Next.js hot reloads via globalThis.
 // All mock API route handlers read/write through this module.
 
-export interface User { id: string; email: string; }
+export interface User { id: string; email: string; name?: string; passwordHash?: string; }
 export interface Cv { id: string; userId: string; title: string; template: string; createdAt: string; updatedAt: string; }
 export interface PersonalInfo { id: string; cvId: string; fullName: string; jobTitle?: string; email?: string; phone?: string; location?: string; summary?: string; linkedIn?: string; gitHub?: string; website?: string; }
 export interface WorkExperience { id: string; cvId: string; company: string; role: string; location?: string; startDate: string; endDate?: string; isCurrent: boolean; bullets: string[]; orderIndex: number; }
@@ -31,7 +31,13 @@ function seed(): MockStore {
   const cvId = "cv-arinao-001";
 
   return {
-    users: [{ id: userId, email: "dev@cvmaker.local" }],
+    users: [{
+      id: userId,
+      email: "arinao.dev@gmail.com",
+      name: "Arinao Ndou",
+      // bcrypt hash of "Test1234"
+      passwordHash: "$2b$10$9cvIuGV.HysbR0x/iOWI4OMLbKi5oVyyMwCtdA1l3.0/.ot7wIj4y",
+    }],
     cvs: [{
       id: cvId, userId,
       title: "Arinao Ndou — Full Stack Engineer",

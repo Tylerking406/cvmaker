@@ -8,7 +8,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { FileText, Plus, Trash2, ArrowRight, Loader2, Eye } from "lucide-react";
 
-const DEV_USER_EMAIL = "dev@cvmaker.local";
+const DEV_USER_EMAIL = "arinao.dev@gmail.com";
 const DEV_USER_ID_KEY = "cvmaker_dev_user_id";
 
 async function getOrCreateDevUser(): Promise<string> {
