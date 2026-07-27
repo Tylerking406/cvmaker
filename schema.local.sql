@@ -10,10 +10,14 @@ create extension if not exists "pgcrypto";
 -- ─────────────────────────────────────────
 -- Users (mirrors Supabase auth.users locally)
 -- ─────────────────────────────────────────
+-- password_hash is local-only: on Supabase, credentials live in auth.users and
+-- `name` lives in auth.users.raw_user_meta_data.
 create table users (
-  id         uuid primary key default gen_random_uuid(),
-  email      text not null unique,
-  created_at timestamptz not null default now()
+  id            uuid primary key default gen_random_uuid(),
+  email         text not null unique,
+  password_hash text,
+  name          text,
+  created_at    timestamptz not null default now()
 );
 
 -- ─────────────────────────────────────────

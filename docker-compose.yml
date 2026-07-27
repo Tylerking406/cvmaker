@@ -33,6 +33,11 @@ services:
       ConnectionStrings__DefaultConnection: >-
         Host=db;Port=5432;Database=cvmaker;Username=cvmaker;Password=cvmaker_local
       CORS_ORIGIN: http://localhost:3000
+      # HS256 signing key. The API refuses to start if this is missing or under 32 bytes.
+      # Override in CI/prod by exporting SUPABASE_JWT_SECRET; when pointing at a real
+      # Supabase project, use that project's JWT secret and issuer here.
+      Supabase__JwtSecret: ${SUPABASE_JWT_SECRET:-local-dev-only-secret-change-me-32chars-min}
+      Supabase__Issuer: http://localhost:5133/auth/v1
     ports:
       - "5133:5133"
     healthcheck:
@@ -48,10 +53,9 @@ services:
       context: ./cvmaker-ui
       dockerfile: Dockerfile
       args:
-        # Points the fallback rewrite proxy at the API container.
-        # The mock app/api/ handlers still take priority — real backend is used
-        # only for any route that has no mock handler (currently none).
-        # To switch fully to the real backend: remove cvmaker-ui/app/api/.
+        # Points the fallback rewrite proxy at the API container. The mock app/api/
+        # handlers have been removed, so every /api/* request — including auth — is
+        # proxied to the .NET API. Baked in at build time for next.config.ts.
         BACKEND_URL: http://api:5133
     restart: unless-stopped
     depends_on:
@@ -59,8 +63,6 @@ services:
         condition: service_healthy
     environment:
       BACKEND_URL: http://api:5133
-      NEXTAUTH_URL: http://localhost:3000
-      NEXTAUTH_SECRET: change-me-in-production-use-openssl-rand-base64-32
     ports:
       - "3000:3000"
 

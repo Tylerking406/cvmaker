@@ -1,3 +1,4 @@
+using CvMaker.Api.Auth;
 using CvMaker.Api.Data;
 using CvMaker.Api.DTOs;
 using CvMaker.Api.Models;
@@ -6,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CvMaker.Api.Controllers;
 
+[ServiceFilter(typeof(CvOwnershipFilter))]
 [ApiController]
 [Route("api/cvs/{cvId}/work-experience")]
 public class WorkExperienceController(AppDbContext db) : ControllerBase

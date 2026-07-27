@@ -1,3 +1,4 @@
+using CvMaker.Api.Auth;
 using CvMaker.Api.Data;
 using CvMaker.Api.DTOs;
 using CvMaker.Api.Models;
@@ -6,15 +7,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CvMaker.Api.Controllers;
 
+// No CvOwnershipFilter here: these routes have no {cvId}, so ownership is folded into
+// each query instead. Authorization comes from the global fallback policy.
 [ApiController]
 [Route("api/cvs")]
 public class CvsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] Guid userId)
+    public async Task<IActionResult> GetAll()
     {
+        var uid = User.GetUserId();   // hoisted: EF cannot translate the extension method
         var cvs = await db.Cvs
-            .Where(c => c.UserId == userId)
+            .Where(c => c.UserId == uid)
             .Select(c => new CvResponse(c.Id, c.UserId, c.Title, c.Template, c.CreatedAt, c.UpdatedAt))
             .ToListAsync();
 
@@ -24,6 +28,7 @@ public class CvsController(AppDbContext db) : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(Guid id)
     {
+        var uid = User.GetUserId();
         var cv = await db.Cvs
             .Include(c => c.PersonalInfo)
             .Include(c => c.WorkExperiences)
@@ -32,8 +37,9 @@ public class CvsController(AppDbContext db) : ControllerBase
             .Include(c => c.Projects)
             .Include(c => c.Certifications)
             .Include(c => c.Achievements)
-            .FirstOrDefaultAsync(c => c.Id == id);
+            .FirstOrDefaultAsync(c => c.Id == id && c.UserId == uid);
 
+        // 404 rather than 403 for someone else's CV — a 403 would confirm the id exists.
         if (cv is null) return NotFound();
 
         return Ok(new CvDetailResponse(
@@ -59,7 +65,7 @@ public class CvsController(AppDbContext db) : ControllerBase
     {
         var cv = new Cv
         {
-            UserId = request.UserId,
+            UserId = User.GetUserId(),
             Title = request.Title,
             Template = request.Template,
             CreatedAt = DateTime.UtcNow,
@@ -76,7 +82,8 @@ public class CvsController(AppDbContext db) : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(Guid id, UpdateCvRequest request)
     {
-        var cv = await db.Cvs.FindAsync(id);
+        var uid = User.GetUserId();
+        var cv = await db.Cvs.FirstOrDefaultAsync(c => c.Id == id && c.UserId == uid);
         if (cv is null) return NotFound();
 
         cv.Title = request.Title;
@@ -89,7 +96,8 @@ public class CvsController(AppDbContext db) : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var cv = await db.Cvs.FindAsync(id);
+        var uid = User.GetUserId();
+        var cv = await db.Cvs.FirstOrDefaultAsync(c => c.Id == id && c.UserId == uid);
         if (cv is null) return NotFound();
 
         db.Cvs.Remove(cv);

@@ -1,7 +1,8 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { signIn } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
+import { ApiError } from "@/lib/api";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Mail, Lock, User, Eye, EyeOff, FileText, ArrowRight, CheckCircle2 } from "lucide-react";
 
@@ -10,6 +11,7 @@ type Mode = "login" | "register";
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
+  const auth = useAuth();
   const callbackUrl = params.get("callbackUrl") ?? "/dashboard";
 
   const [mode, setMode] = useState<Mode>("login");
@@ -31,16 +33,17 @@ function LoginForm() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    const res = await signIn("credentials", {
-      email: email.trim().toLowerCase(),
-      password,
-      redirect: false,
-    });
-    setLoading(false);
-    if (res?.error) {
-      setError("Incorrect email or password.");
-    } else {
+    try {
+      await auth.signIn(email.trim().toLowerCase(), password);
       router.push(callbackUrl);
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 401
+          ? "Incorrect email or password."
+          : "Could not reach the server. Please try again.",
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -49,26 +52,20 @@ function LoginForm() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Registration failed. Please try again.");
-        return;
-      }
+      // Register already returns a session, so there's no second sign-in round trip.
+      await auth.signUp(name.trim(), email.trim().toLowerCase(), password);
       setRegistered(true);
-      // Auto-login after registration
-      const login = await signIn("credentials", {
-        email: email.trim().toLowerCase(),
-        password,
-        redirect: false,
-      });
-      if (!login?.error) router.push(callbackUrl);
-    } catch {
-      setError("Something went wrong. Please try again.");
+      router.push(callbackUrl);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(
+          err.status === 409
+            ? "An account with this email already exists."
+            : err.message || "Registration failed. Please try again.",
+        );
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

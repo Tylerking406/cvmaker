@@ -11,43 +11,77 @@ CvMaker is a full-stack CV builder with two parts:
 
 ---
 
-## Quick Start — Mock Mode (no backend needed)
+## Quick Start — Docker Compose
 
-The frontend ships with a built-in mock API powered by Next.js route handlers. It serves realistic pre-seeded data so you can run and test the full UI without setting up .NET or PostgreSQL.
-
-### Requirements
-- Node.js 18+
-- npm
-
-### Steps
+The mock API has been removed. The .NET API owns authentication and all data, so the
+backend must be running.
 
 ```bash
-# 1. Clone and switch to the dev branch
 git clone https://github.com/Tylerking406/cvmaker.git
 cd cvmaker
-git checkout claude/mock-api-local-dev
-
-# 2. Install and run the frontend
-cd cvmaker-ui
-npm install
-npm run dev
+docker compose up --build
 ```
 
-Open **http://localhost:3000** — the dashboard loads immediately with Arinao’s pre-seeded CV.
+Open **http://localhost:3000**. You will be redirected to `/login`.
 
-### What’s pre-loaded
+### Seeded dev account
 
-The mock store seeds a full CV for **Arinao Ndou** (`dev@cvmaker.local`):
+| Email | Password |
+|-------|----------|
+| `arinao.dev@gmail.com` | `Test1234` |
 
-| Section | Entries |
-|---------|---------|
-| Personal Info | Name, job title, email, phone, location, LinkedIn, GitHub, summary |
-| Work Experience | DigiOutsource (current), Kion Consulting, Tata-iMali — each with bullets |
-| Education | BSc Computer Science & Engineering, UCT (2021–2024) |
-| Skills | 6 categories: Backend, Frontend, Infrastructure, Messaging & Observability, Auth, Languages |
-| Projects | AI Contract Summarisation API, Travel & Tour Booking Platform, Innovexia Portfolio Website |
+Seeded on API startup in Development by `CvMaker.Api/Data/DbInitializer.cs`, which is
+idempotent — it never overwrites an existing password.
 
-Data survives hot reloads and resets on full dev server restart.
+### ⚠️ Upgrading an existing database
+
+Postgres only runs `/docker-entrypoint-initdb.d/*` on the **first** init of an empty
+volume, so an existing `postgres_data` predates the `password_hash` column. `DbInitializer`
+issues `ALTER TABLE … ADD COLUMN IF NOT EXISTS` on every Development start to cover this,
+so no action is normally needed. For a clean slate:
+
+```bash
+docker compose down -v && docker compose up --build   # destroys local data
+```
+
+---
+
+## Authentication
+
+The API mints HS256 JWTs in **Supabase's claim shape** (`sub`, `email`, `aud=authenticated`,
+`role=authenticated`), so pointing this app at a real Supabase project later is a config
+change rather than a rewrite — see `diagrams.md`.
+
+| | |
+|---|---|
+| Signing key | `Supabase__JwtSecret` env var. **The API refuses to start** if it is missing or under 32 bytes. |
+| Issuer | `Supabase__Issuer`, default `http://localhost:5133/auth/v1` |
+| Expiry | `Supabase__ExpiryMinutes`, default 60 |
+
+**Two transports.** Login and register return the token in the JSON body *and* set an
+httpOnly `cvm_token` cookie. The browser uses the cookie (it survives refresh, and Next.js
+middleware reads it to guard `/dashboard` and `/cv`); everything else uses
+`Authorization: Bearer`. The API accepts either.
+
+**Authorization is default-deny.** `Program.cs` sets a `FallbackPolicy` requiring an
+authenticated user, so every endpoint is protected unless it opts out with
+`[AllowAnonymous]` — currently only `/health` and the register/login/logout endpoints.
+
+**Ownership.** `[Authorize]` alone does not stop a valid token passing someone else's
+`cvId`, so `Auth/CvOwnershipFilter.cs` is applied to all seven child-resource controllers
+and `CvsController` folds the owner into each query. Cross-account access returns **404,
+not 403**, so it never confirms that a CV id exists.
+
+### Auth endpoints
+
+| Method | Route | Auth | Notes |
+|--------|-------|------|-------|
+| POST | `/api/auth/register` | anonymous | 400 if password < 8 chars, 409 if email taken |
+| POST | `/api/auth/login` | anonymous | 401 with the same message for unknown email or wrong password |
+| GET | `/api/auth/me` | required | Rehydration after refresh; returns `{accessToken, user}` |
+| POST | `/api/auth/logout` | anonymous | Clears the cookie |
+
+`GET`/`POST /api/users` have been **removed** — the former dumped every user row.
 
 ---
 
@@ -97,15 +131,20 @@ dotnet run
 - Swagger UI: **http://localhost:5133/swagger**
 - Health check: **http://localhost:5133/health**
 
-#### 4. Disable mock API
-
-The mock routes (`cvmaker-ui/app/api/`) take priority over the proxy to localhost:5133. To use the real backend:
+The API will not start unless `Supabase__JwtSecret` is set to at least 32 bytes:
 
 ```bash
-rm -rf cvmaker-ui/app/api
+export Supabase__JwtSecret="local-dev-only-secret-change-me-32chars-min"
 ```
 
-Then `npm run dev` in `cvmaker-ui/` — all `/api/*` calls will proxy to the .NET backend.
+#### 4. Run the frontend
+
+```bash
+cd cvmaker-ui && npm run dev
+```
+
+All `/api/*` calls proxy to the .NET backend via the `fallback` rewrite in
+`next.config.ts`. Set `BACKEND_URL` in `.env.local` if the API is not on port 5133.
 
 ---
 
@@ -114,21 +153,23 @@ Then `npm run dev` in `cvmaker-ui/` — all `/api/*` calls will proxy to the .NE
 ```
 cvmaker/
 ├── CvMaker.Api/              # ASP.NET Core 8 backend
-│   ├── Controllers/          # REST API controllers
+│   ├── Auth/                 # JWT minting, cookie, claims, ownership filter
+│   ├── Controllers/          # REST API controllers (incl. AuthController)
 │   ├── Models/               # EF Core entity models
 │   ├── DTOs/                 # Request / response shapes
-│   └── Data/                 # AppDbContext
+│   └── Data/                 # AppDbContext + DbInitializer (dev seed)
 ├── cvmaker-ui/               # Next.js 15 frontend
+│   ├── middleware.ts         # Cookie-based route guard for /dashboard and /cv
 │   ├── app/
 │   │   ├── page.tsx          # Landing page
+│   │   ├── login/            # Sign in / create account
 │   │   ├── dashboard/        # CV list
-│   │   ├── cv/[id]/          # CV editor (all sections)
-│   │   │   └── preview/      # CV preview + print to PDF
-│   │   └── api/              # Mock API route handlers (dev)
+│   │   └── cv/[id]/          # CV editor (all sections)
+│   │       └── preview/      # CV preview + print to PDF
 │   ├── components/ui/        # shadcn/ui component library
 │   └── lib/
-│       ├── api.ts            # Typed API client
-│       └── mock-store.ts     # In-memory store + seed data
+│       ├── api.ts            # Typed API client (token + 401 handling)
+│       └── auth-context.tsx  # Session state, sign in/up/out
 ├── schema.sql                # Production schema (with RLS)
 ├── schema.local.sql          # Local dev schema (no RLS)
 └── setup-local-dev.sh        # One-shot dev setup (Ubuntu)
@@ -138,13 +179,15 @@ cvmaker/
 
 ## API Reference
 
-All endpoints at `/api`. In mock mode they are served by Next.js route handlers; in real mode they proxy to the .NET backend on port 5133.
+All endpoints at `/api`, proxied to the .NET backend on port 5133.
+
+**Every endpoint below requires authentication** and is scoped to the caller's token. A
+CV belonging to another account returns 404, never its contents. See the Authentication
+section above for the auth endpoints.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/users` | List users |
-| POST | `/api/users` | Create user |
-| GET | `/api/cvs?userId=` | List CVs for a user |
+| GET | `/api/cvs` | List the caller's CVs (no `userId` — it comes from the token) |
 | POST | `/api/cvs` | Create CV |
 | GET | `/api/cvs/:id` | Get CV |
 | PUT | `/api/cvs/:id` | Update CV title / template |
@@ -173,7 +216,7 @@ All endpoints at `/api`. In mock mode they are served by Next.js route handlers;
 | GET | `/api/cvs/:id/achievements` | List achievements |
 | POST | `/api/cvs/:id/achievements` | Add achievement |
 | DELETE | `/api/cvs/:id/achievements/:eid` | Delete achievement |
-| GET | `/api/health` | Health check |
+| GET | `/health` | Health check — the one anonymous endpoint (the compose healthcheck polls it) |
 
 ---
 
@@ -191,9 +234,29 @@ The preview matches the reference CV design:
 
 ---
 
-## Switching between mock and real backend
+## Verifying auth end-to-end
 
-| Mode | What to do |
-|------|------------|
-| **Mock** (default) | Just run `npm run dev` — no other setup needed |
-| **Real backend** | `rm -rf cvmaker-ui/app/api` then start `dotnet run` in `CvMaker.Api/` |
+```bash
+docker compose down -v && docker compose up --build -d
+
+curl -i localhost:5133/health                                     # 200, anonymous
+curl -s -o /dev/null -w '%{http_code}\n' localhost:3000/api/cvs   # 401
+
+A=$(curl -s -X POST localhost:3000/api/auth/login -H 'Content-Type: application/json' \
+    -d '{"email":"arinao.dev@gmail.com","password":"Test1234"}' | jq -r .accessToken)
+
+# Claim shape must be Supabase's: sub, email, aud/role = "authenticated" — and no "nameid"
+echo "$A" | cut -d. -f2 | base64 -d 2>/dev/null | jq .
+
+# A tampered signature must be rejected — this is what proves validation is really on
+curl -s -o /dev/null -w '%{http_code}\n' localhost:3000/api/cvs -H "Authorization: Bearer ${A}x"   # 401
+```
+
+Then register a second user and confirm every one of these prints `404` — no CV of A's is
+reachable with B's token:
+
+```bash
+for u in "" /personal-info /work-experience /education /skills /projects /certifications /achievements; do
+  curl -s -o /dev/null -w "$u %{http_code}\n" "http://localhost:3000/api/cvs/$CV$u" -H "Authorization: Bearer $B"
+done
+```

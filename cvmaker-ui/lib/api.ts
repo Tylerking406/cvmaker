@@ -5,6 +5,20 @@ type Interceptor = (method: string, url: string, status: number | undefined, dur
 let interceptor: Interceptor | null = null;
 export function setApiInterceptor(fn: Interceptor | null) { interceptor = fn; }
 
+// The API also sets an httpOnly cookie, so requests still authenticate after a refresh
+// before the context has rehydrated. This copy is what populates the Authorization
+// header, which is the transport the backend treats as primary.
+let accessToken: string | null = null;
+export function setAccessToken(token: string | null) { accessToken = token; }
+
+/** Thrown with the HTTP status attached so callers can distinguish 409 from 401. */
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const method = (options?.method ?? "GET").toUpperCase();
   const url = `${BASE}${path}`;
@@ -14,12 +28,34 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   try {
     const res = await fetch(url, {
-      headers: { "Content-Type": "application/json", ...options?.headers },
       ...options,
+      // After ...options so a caller passing headers augments rather than replaces these.
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...options?.headers,
+      },
+      credentials: "same-origin",
     });
     const duration = Math.round(performance.now() - start);
     interceptor?.(method, url, res.status, duration);
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
+    if (!res.ok) {
+      // Bounce to login on an expired session — but never for /auth/* itself, or a wrong
+      // password would navigate away instead of rendering the inline error.
+      if (res.status === 401 && !path.startsWith("/auth/") && typeof window !== "undefined") {
+        setAccessToken(null);
+        const cb = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/login?callbackUrl=${cb}`;
+      }
+      let message = `${res.status} ${res.statusText}`;
+      try {
+        const body = await res.json();
+        if (body?.error) message = body.error;
+      } catch { /* non-JSON error body */ }
+      throw new ApiError(res.status, message);
+    }
+
     if (res.status === 204) return undefined as T;
     return res.json();
   } catch (err) {
@@ -30,16 +66,22 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  users: {
-    list: () => request<{ id: string; email: string }[]>("/users"),
-    create: (email: string) =>
-      request<{ id: string; email: string }>("/users", {
+  auth: {
+    login: (email: string, password: string) =>
+      request<AuthResponse>("/auth/login", {
         method: "POST",
-        body: JSON.stringify(email),
+        body: JSON.stringify({ email, password }),
       }),
+    register: (name: string, email: string, password: string) =>
+      request<AuthResponse>("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ name, email, password }),
+      }),
+    me: () => request<AuthResponse>("/auth/me"),
+    logout: () => request<void>("/auth/logout", { method: "POST" }),
   },
   cvs: {
-    list: (userId: string) => request<Cv[]>(`/cvs?userId=${userId}`),
+    list: () => request<Cv[]>("/cvs"),
     get: (id: string) => request<Cv>(`/cvs/${id}`),
     create: (data: CreateCvRequest) =>
       request<Cv>("/cvs", { method: "POST", body: JSON.stringify(data) }),
@@ -149,6 +191,19 @@ export const api = {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  name?: string;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+  user: AuthUser;
+}
+
 export interface Cv {
   id: string;
   userId: string;
@@ -158,8 +213,8 @@ export interface Cv {
   updatedAt: string;
 }
 
+// No userId: the server takes the owner from the caller's token.
 export interface CreateCvRequest {
-  userId: string;
   title: string;
   template?: string;
 }

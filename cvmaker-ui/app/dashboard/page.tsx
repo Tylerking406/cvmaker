@@ -3,48 +3,28 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type Cv } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Plus, Trash2, ArrowRight, Loader2, Eye } from "lucide-react";
-
-const DEV_USER_EMAIL = "arinao.dev@gmail.com";
-const DEV_USER_ID_KEY = "cvmaker_dev_user_id";
-
-async function getOrCreateDevUser(): Promise<string> {
-  const cached = localStorage.getItem(DEV_USER_ID_KEY);
-  if (cached) return cached;
-
-  const users = await api.users.list();
-  const existing = users.find((u) => u.email === DEV_USER_EMAIL);
-  if (existing) {
-    localStorage.setItem(DEV_USER_ID_KEY, existing.id);
-    return existing.id;
-  }
-
-  const created = await api.users.create(DEV_USER_EMAIL);
-  localStorage.setItem(DEV_USER_ID_KEY, created.id);
-  return created.id;
-}
+import { FileText, Plus, Trash2, ArrowRight, Loader2, Eye, LogOut } from "lucide-react";
 
 export default function DashboardPage() {
-  const [userId, setUserId] = useState<string | null>(null);
+  const { user, signOut } = useAuth();
   const [cvs, setCvs] = useState<Cv[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    getOrCreateDevUser()
-      .then((uid) => {
-        if (cancelled) return;
-        setUserId(uid);
-        return api.cvs.list(uid);
-      })
+    // The server scopes this to the caller's token — no user id is sent.
+    api.cvs
+      .list()
       .then((data) => {
-        if (cancelled || !data) return;
+        if (cancelled) return;
         setCvs(data);
         setError(null);
       })
@@ -59,10 +39,9 @@ export default function DashboardPage() {
   }, []);
 
   async function createCv() {
-    if (!userId) return;
     setCreating(true);
     try {
-      const cv = await api.cvs.create({ userId, title: `My CV ${cvs.length + 1}` });
+      const cv = await api.cvs.create({ title: `My CV ${cvs.length + 1}` });
       setCvs((prev) => [cv, ...prev]);
     } catch {
       setError("Failed to create CV.");
@@ -87,10 +66,41 @@ export default function DashboardPage() {
             CvMaker
           </Link>
         </div>
-        <Button onClick={createCv} disabled={creating || !userId} size="sm" className="gap-2">
-          {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          New CV
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button onClick={createCv} disabled={creating} size="sm" className="gap-2">
+            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            New CV
+          </Button>
+
+          {user && (
+            <div className="relative">
+              <button
+                onClick={() => setMenuOpen((o) => !o)}
+                onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
+                className="h-8 w-8 rounded-full bg-primary/15 border border-primary/30 text-primary text-xs font-semibold flex items-center justify-center hover:bg-primary/25 transition-colors"
+                title={user.email}
+              >
+                {(user.name ?? user.email).charAt(0).toUpperCase()}
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 mt-2 w-56 rounded-xl border border-border bg-card shadow-xl z-20 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border">
+                    {user.name && <p className="text-sm font-medium text-foreground truncate">{user.name}</p>}
+                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                  </div>
+                  <button
+                    onClick={() => signOut()}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-10">

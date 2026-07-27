@@ -1,6 +1,15 @@
 -- CV Maker Schema
 -- Run this in Supabase SQL Editor
--- Supabase Auth handles the users table automatically
+-- Supabase Auth handles the users table automatically.
+--
+-- Deliberately NO `users` table here — it would collide with GoTrue's auth.users.
+-- Locally (schema.local.sql) a `users` table with password_hash + name substitutes
+-- for auth.users; on Supabase, credentials are managed by Auth and `name` lives in
+-- auth.users.raw_user_meta_data.
+--
+-- The API mints JWTs in Supabase's claim shape (sub / email / aud=authenticated /
+-- role=authenticated), so the `auth.uid() = user_id` RLS policies below stay valid
+-- when this app is pointed at a real Supabase project.
 
 -- Enable UUID generation
 create extension if not exists "pgcrypto";
