@@ -94,7 +94,7 @@ public class AuthController(AppDbContext db, TokenService tokens, IWebHostEnviro
         if (user is null) return Unauthorized(new { error = "Account no longer exists." });
 
         var token = await HttpContext.GetTokenAsync(JwtBearerDefaults.AuthenticationScheme, "access_token")
-                    ?? Request.Cookies[CookieExtensions.CookieName]
+                    ?? Request.Cookies[AuthCookieExtensions.CookieName]
                     ?? "";
 
         return Ok(new AuthResponse(token, "Bearer", tokens.ExpirySeconds,

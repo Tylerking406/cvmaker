@@ -69,7 +69,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             OnMessageReceived = ctx =>
             {
                 if (string.IsNullOrEmpty(ctx.Token) &&
-                    ctx.Request.Cookies.TryGetValue(CookieExtensions.CookieName, out var cookie))
+                    ctx.Request.Cookies.TryGetValue(AuthCookieExtensions.CookieName, out var cookie))
                     ctx.Token = cookie;
                 return Task.CompletedTask;
             }

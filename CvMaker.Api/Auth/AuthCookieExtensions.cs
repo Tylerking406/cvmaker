@@ -5,7 +5,7 @@ namespace CvMaker.Api.Auth;
 /// middleware (which cannot read localStorage) can guard /dashboard and /cv.
 /// The Authorization: Bearer header remains the primary transport.
 /// </summary>
-public static class CookieExtensions
+public static class AuthCookieExtensions
 {
     public const string CookieName = "cvm_token";
 
