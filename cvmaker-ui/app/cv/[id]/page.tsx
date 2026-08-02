@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectValue, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast";
+import { CvNotFound } from "@/components/cv-not-found";
 import {
   FileText, ChevronLeft, User, Briefcase, GraduationCap,
   Wrench, FolderOpen, Award, Trophy, Loader2, Plus, Trash2, Save, Eye, ChevronDown, ChevronUp, CheckCircle2, Circle, Palette,
@@ -82,6 +84,7 @@ export default function CvEditorPage() {
   const [cv, setCv] = useState<Cv | null>(null);
   const [section, setSection] = useState<Section>("personal");
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
   const [info, setInfo] = useState<Partial<PersonalInfo>>({});
   const [savingInfo, setSavingInfo] = useState(false);
@@ -112,6 +115,11 @@ export default function CvEditorPage() {
       setProjects(projData);
       setCertifications(certData);
       setAchievements(achData);
+    }).catch(() => {
+      // api.cvs.get is the only call above without its own catch. Without this the whole
+      // chain rejects, cv stays null, and the editor renders live and empty — so every
+      // subsequent save silently 404s against a CV that isn't there.
+      setNotFound(true);
     }).finally(() => setLoading(false));
   }, [id]);
 
@@ -142,6 +150,8 @@ export default function CvEditorPage() {
       </div>
     );
   }
+
+  if (notFound || !cv) return <CvNotFound />;
 
   const completeness: Record<Section, boolean> = {
     personal: !!sanitizeText(info.fullName ?? ""),

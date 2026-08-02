@@ -1,6 +1,5 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { FileText, Sparkles, Download, Layers } from "lucide-react";
+import { LandingNavCta, LandingHeroCta } from "@/components/landing-cta";
 
 export default function HomePage() {
   return (
@@ -13,9 +12,7 @@ export default function HomePage() {
           </div>
           <span className="font-semibold text-foreground">CvMaker</span>
         </div>
-        <Link href="/dashboard">
-          <Button size="sm">Get Started</Button>
-        </Link>
+        <LandingNavCta />
       </nav>
 
       {/* Hero */}
@@ -37,14 +34,7 @@ export default function HomePage() {
           clean design, ready to impress.
         </p>
 
-        <div className="flex gap-3">
-          <Link href="/dashboard">
-            <Button size="lg" className="gap-2">
-              <FileText className="h-4 w-4" />
-              Open Dashboard
-            </Button>
-          </Link>
-        </div>
+        <LandingHeroCta />
       </section>
 
       {/* Features */}

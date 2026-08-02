@@ -9,6 +9,7 @@ import { SAMPLE_CV_DATA } from "@/lib/cv-template-data";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChevronLeft, Check, Loader2 } from "lucide-react";
+import { CvNotFound } from "@/components/cv-not-found";
 
 // Roughly A4 at 96dpi — matches the "mm"/"pt" units the templates use internally.
 const PAGE_W = 794;
@@ -20,9 +21,15 @@ export default function ChooseTemplatePage() {
   const [cv, setCv] = useState<Cv | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    api.cvs.get(id).then(setCv).finally(() => setLoading(false));
+    // Without the catch, cv stays null and the gallery renders fully interactive while
+    // every "Use this template" click silently no-ops on the `if (!cv) return` below.
+    api.cvs.get(id)
+      .then(setCv)
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
   }, [id]);
 
   async function selectTemplate(templateId: string) {
@@ -31,6 +38,8 @@ export default function ChooseTemplatePage() {
     try {
       const updated = await api.cvs.update(id, { title: cv.title, template: templateId });
       setCv(updated);
+    } catch {
+      // Reported by the API layer's mutation handler as a toast.
     } finally {
       setSavingId(null);
     }
@@ -43,6 +52,8 @@ export default function ChooseTemplatePage() {
       </div>
     );
   }
+
+  if (notFound || !cv) return <CvNotFound />;
 
   return (
     <div className="min-h-screen bg-background">

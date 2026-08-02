@@ -26,6 +26,9 @@ export function middleware(req: NextRequest) {
   url.pathname = "/login";
   url.search = "";
   url.searchParams.set("callbackUrl", req.nextUrl.pathname + req.nextUrl.search);
+  // Distinguish "you were signed in and it lapsed" from "you were never signed in", so the
+  // login page can explain why the user is suddenly looking at it.
+  if (token) url.searchParams.set("reason", "expired");
   return NextResponse.redirect(url);
 }
 

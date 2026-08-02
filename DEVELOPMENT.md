@@ -80,6 +80,38 @@ not 403**, so it never confirms that a CV id exists.
 | POST | `/api/auth/login` | anonymous | 401 with the same message for unknown email or wrong password |
 | GET | `/api/auth/me` | required | Rehydration after refresh; returns `{accessToken, user}` |
 | POST | `/api/auth/logout` | anonymous | Clears the cookie |
+| POST | `/api/auth/forgot-password` | anonymous | **Always 200**, registered or not — otherwise it enumerates accounts |
+| POST | `/api/auth/reset-password` | anonymous | Single-use token, 1-hour expiry |
+
+All `/api/auth/*` routes are rate limited to **10 requests/minute per IP**, returning 429
+with `Retry-After`. This relies on `UseForwardedHeaders`; behind a proxy that doesn't send
+`X-Forwarded-For`, every caller shares one bucket.
+
+### Startup guards
+
+The API refuses to start rather than run in a silently-broken state:
+
+| Condition | Why |
+|---|---|
+| `Supabase__JwtSecret` missing or < 32 bytes | An empty HMAC key accepts forged tokens |
+| `Supabase__JwtSecret` is the repo default and env ≠ Development | That value is committed here, so it is public — anyone could forge tokens |
+| `Email__Smtp__Host` unset and env ≠ Development | Reset mail would be silently dropped, locking users out |
+
+Copy `.env.example` to `.env` and fill these in before deploying.
+
+### Schema
+
+EF Core migrations in `CvMaker.Api/Data/Migrations/` are the single source of truth, applied
+automatically on startup in **every** environment. There are no SQL schema files to run —
+`docs/future/supabase-target.sql` is a reference target, not something the app uses.
+
+```bash
+dotnet ef migrations add <Name> -o Data/Migrations   # after changing a model
+```
+
+The dev fixture account is seeded only when **both** `ASPNETCORE_ENVIRONMENT=Development`
+and `Seed__Enabled=true`. Note `CvMaker.Api/Dockerfile` sets Production while
+`docker-compose.yml` overrides it to Development — that is why one signal alone isn't enough.
 
 `GET`/`POST /api/users` have been **removed** — the former dumped every user row.
 

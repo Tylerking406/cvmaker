@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { api, setAccessToken, type AuthUser } from "@/lib/api";
+import { api, setAccessToken, setUnauthorizedHandler, setMutationErrorHandler, type AuthUser } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 
 interface AuthState {
   user: AuthUser | null;
@@ -16,8 +17,26 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const { notify } = useToast();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // A 401 anywhere means the session is gone. Drop the user here so the UI stops
+  // pretending to be signed in; the stale cookie is cleared too, otherwise middleware
+  // keeps admitting the user to /dashboard, which 401s and bounces back forever.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setUser(null);
+      void fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+    });
+    // Failed writes surface as a toast and nothing else — deliberately no navigation, so
+    // whatever the user typed stays on screen for them to retry or copy.
+    setMutationErrorHandler((message) => notify(message, "error"));
+    return () => {
+      setUnauthorizedHandler(null);
+      setMutationErrorHandler(null);
+    };
+  }, [notify]);
 
   // Rehydrate after a page refresh: the in-memory token is gone, but the httpOnly
   // cookie authenticates this call and /me hands the token back.

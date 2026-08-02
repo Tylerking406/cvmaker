@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, type Cv } from "@/lib/api";
+import { api, ApiError, type Cv } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,8 +28,16 @@ export default function DashboardPage() {
         setCvs(data);
         setError(null);
       })
-      .catch(() => {
-        if (!cancelled) setError("Could not reach the API — is it running on port 5133?");
+      .catch((err) => {
+        if (cancelled) return;
+        // A dead session is handled globally (auth context clears state); anything else is
+        // reported here. The old copy blamed the API being down for every failure.
+        if (err instanceof ApiError && err.status === 401) return;
+        setError(
+          err instanceof ApiError
+            ? `Couldn't load your CVs: ${err.message}`
+            : "Couldn't reach the server. Check your connection and try again.",
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -44,15 +52,22 @@ export default function DashboardPage() {
       const cv = await api.cvs.create({ title: `My CV ${cvs.length + 1}` });
       setCvs((prev) => [cv, ...prev]);
     } catch {
-      setError("Failed to create CV.");
+      // Surfaced as a toast by the API layer.
     } finally {
       setCreating(false);
     }
   }
 
   async function deleteCv(id: string) {
-    await api.cvs.delete(id).catch(() => null);
-    setCvs((prev) => prev.filter((c) => c.id !== id));
+    try {
+      await api.cvs.delete(id);
+      // Only drop the card once the server has actually accepted the delete — it used to
+      // disappear even when the request failed, so a rejected delete looked successful
+      // until the next refresh brought it back.
+      setCvs((prev) => prev.filter((c) => c.id !== id));
+    } catch {
+      // Surfaced as a toast by the API layer.
+    }
   }
 
   return (

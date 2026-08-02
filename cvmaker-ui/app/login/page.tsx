@@ -1,18 +1,25 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Mail, Lock, User, Eye, EyeOff, FileText, ArrowRight, CheckCircle2 } from "lucide-react";
 
-type Mode = "login" | "register";
+type Mode = "login" | "register" | "forgot";
 
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const auth = useAuth();
   const callbackUrl = params.get("callbackUrl") ?? "/dashboard";
+  const expired = params.get("reason") === "expired";
+
+  // Already signed in — don't show an empty sign-in form to someone who arrived here
+  // from a bookmark, the logo, or the back button after logging in.
+  useEffect(() => {
+    if (!auth.loading && auth.user) router.replace(callbackUrl);
+  }, [auth.loading, auth.user, callbackUrl, router]);
 
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
@@ -22,11 +29,29 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [registered, setRegistered] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   function switchMode(next: Mode) {
     setMode(next);
     setError("");
     setRegistered(false);
+    setResetSent(false);
+  }
+
+  async function handleForgot(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      await api.auth.forgotPassword(email.trim().toLowerCase());
+      // The API returns the same response whether or not the address is registered, so
+      // this confirmation must be equally non-committal.
+      setResetSent(true);
+    } catch {
+      setError("Could not reach the server. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -122,6 +147,12 @@ function LoginForm() {
           </div>
 
           <div className="p-8">
+            {expired && !error && (
+              <div className="text-sm text-amber-400/90 bg-amber-400/10 border border-amber-400/20 rounded-lg px-4 py-3 mb-6">
+                Your session expired. Sign in again to pick up where you left off.
+              </div>
+            )}
+
             {registered && (
               <div className="flex items-center gap-2 text-sm text-primary bg-primary/10 border border-primary/20 rounded-lg px-4 py-3 mb-6">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
@@ -135,7 +166,17 @@ function LoginForm() {
               </div>
             )}
 
-            <form onSubmit={mode === "login" ? handleLogin : handleRegister} className="space-y-4">
+            {resetSent && (
+              <div className="flex items-start gap-2 text-sm text-primary bg-primary/10 border border-primary/20 rounded-lg px-4 py-3 mb-6">
+                <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                If that email is registered, a reset link is on its way. It expires in an hour.
+              </div>
+            )}
+
+            <form
+              onSubmit={mode === "login" ? handleLogin : mode === "register" ? handleRegister : handleForgot}
+              className="space-y-4"
+            >
               {mode === "register" && (
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Full Name</label>
@@ -169,8 +210,20 @@ function LoginForm() {
                 </div>
               </div>
 
+              {mode !== "forgot" && (
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Password</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Password</label>
+                  {mode === "login" && (
+                    <button
+                      type="button"
+                      onClick={() => setMode("forgot")}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <input
@@ -192,6 +245,7 @@ function LoginForm() {
                   </button>
                 </div>
               </div>
+              )}
 
               <button
                 type="submit"
@@ -202,11 +256,21 @@ function LoginForm() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
-                    {mode === "login" ? "Sign In" : "Create Account"}
+                    {mode === "login" ? "Sign In" : mode === "register" ? "Create Account" : "Send reset link"}
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
               </button>
+
+              {mode === "forgot" && (
+                <button
+                  type="button"
+                  onClick={() => switchMode("login")}
+                  className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Back to sign in
+                </button>
+              )}
             </form>
 
             {/* Divider */}

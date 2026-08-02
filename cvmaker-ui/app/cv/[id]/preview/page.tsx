@@ -8,11 +8,13 @@ import type { CvTemplateData } from "@/lib/cv-template-data";
 import { getTemplate } from "@/components/cv-templates";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Printer, Loader2, Palette } from "lucide-react";
+import { CvNotFound } from "@/components/cv-not-found";
 
 export default function CvPreviewPage() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<CvTemplateData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,6 +30,10 @@ export default function CvPreviewPage() {
     ]).then(([cv, info, experience, education, skills, projects, certifications, achievements]) => {
       if (cancelled) return;
       setData({ cv, info, experience, education, skills, projects, certifications, achievements });
+    }).catch(() => {
+      // Without this the chain rejects, data stays null, and the page renders as a
+      // completely blank white screen with no way back.
+      if (!cancelled) setNotFound(true);
     }).finally(() => {
       if (!cancelled) setLoading(false);
     });
@@ -42,7 +48,7 @@ export default function CvPreviewPage() {
     );
   }
 
-  if (!data) return null;
+  if (notFound || !data) return <CvNotFound />;
 
   const { cv } = data;
   const { Component: TemplateComponent } = getTemplate(cv.template);

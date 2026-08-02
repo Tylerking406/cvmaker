@@ -11,6 +11,20 @@ export function setApiInterceptor(fn: Interceptor | null) { interceptor = fn; }
 let accessToken: string | null = null;
 export function setAccessToken(token: string | null) { accessToken = token; }
 
+/** Notified when the session dies, so auth state can be cleared app-wide. */
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null) { onUnauthorized = fn; }
+
+/**
+ * Notified when a write fails. Reported here rather than at each call site: the editor
+ * alone has 19 mutations, most wrapped in try/finally with no catch, so a failed save was
+ * indistinguishable from a successful one. One choke point also covers future call sites.
+ */
+let onMutationError: ((message: string, status: number) => void) | null = null;
+export function setMutationErrorHandler(fn: ((message: string, status: number) => void) | null) {
+  onMutationError = fn;
+}
+
 /** Thrown with the HTTP status attached so callers can distinguish 409 from 401. */
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -41,18 +55,32 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     interceptor?.(method, url, res.status, duration);
 
     if (!res.ok) {
-      // Bounce to login on an expired session — but never for /auth/* itself, or a wrong
-      // password would navigate away instead of rendering the inline error.
-      if (res.status === 401 && !path.startsWith("/auth/") && typeof window !== "undefined") {
+      // A 401 outside /auth/* means the session died. Clear the local copy, but do NOT
+      // navigate from here: a hard redirect mid-edit destroys everything the user typed.
+      // Callers decide — loads redirect, mutations show a toast and stay put.
+      if (res.status === 401 && !path.startsWith("/auth/")) {
         setAccessToken(null);
-        const cb = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.href = `/login?callbackUrl=${cb}`;
+        onUnauthorized?.();
       }
       let message = `${res.status} ${res.statusText}`;
       try {
         const body = await res.json();
         if (body?.error) message = body.error;
       } catch { /* non-JSON error body */ }
+
+      // Surface failed writes. /auth/* is excluded because those render their errors
+      // inline on the login form — a toast as well would double-report.
+      if (method !== "GET" && !path.startsWith("/auth/")) {
+        onMutationError?.(
+          res.status === 401
+            ? "Your session expired. Sign in again to save your changes."
+            : res.status === 404
+              ? "That item no longer exists. It may have been deleted."
+              : message,
+          res.status,
+        );
+      }
+
       throw new ApiError(res.status, message);
     }
 
@@ -79,6 +107,16 @@ export const api = {
       }),
     me: () => request<AuthResponse>("/auth/me"),
     logout: () => request<void>("/auth/logout", { method: "POST" }),
+    forgotPassword: (email: string) =>
+      request<{ message: string }>("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+    resetPassword: (token: string, password: string) =>
+      request<{ message: string }>("/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({ token, password }),
+      }),
   },
   cvs: {
     list: () => request<Cv[]>("/cvs"),
