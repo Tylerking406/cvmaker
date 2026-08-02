@@ -1,13 +1,29 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
+using System.Threading.RateLimiting;
 using CvMaker.Api.Auth;
 using CvMaker.Api.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Trust the proxy's forwarded headers. Without this, behind a TLS-terminating proxy every
+// request appears to come from the load balancer, which would collapse the per-IP rate
+// limiter below into a single shared bucket and make it useless. It also keeps
+// Request.Scheme correct for any future HTTPS redirect.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Hosts are unknown at build time (Railway, Fly, a k8s ingress, …). Restrict these in
+    // a real deployment once the proxy's address is known.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // CORS — allow the Next.js frontend origin (override via CORS_ORIGIN env var).
 // Deliberately no AllowCredentials: the browser reaches the API same-origin through the
@@ -28,13 +44,40 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<CvOwnershipFilter>();
+builder.Services.AddScoped<PasswordResetService>();
 
-// Fail fast: an API that boots with an empty HMAC key silently accepts forged tokens,
-// which is precisely the bug this replaces.
+// Fail fast: an API that boots with a weak or publicly-known HMAC key silently accepts
+// forged tokens for any user id. Checked before the other startup guards because it is the
+// most severe — a misconfiguration here means anyone can impersonate anyone.
 var jwtSecret = builder.Configuration["Supabase:JwtSecret"];
 if (string.IsNullOrWhiteSpace(jwtSecret) || Encoding.UTF8.GetByteCount(jwtSecret) < 32)
     throw new InvalidOperationException(
         "Supabase__JwtSecret must be set and at least 32 bytes long (HS256 signing key).");
+
+// The docker-compose fallback is committed to this repo, so it is public. It is long
+// enough to clear the length check above, which is exactly why length alone is not a
+// sufficient guard. Convenient in Development; fatal anywhere else.
+if (jwtSecret == DevelopmentDefaults.JwtSecret && !builder.Environment.IsDevelopment())
+    throw new InvalidOperationException(
+        $"Supabase__JwtSecret is still the public repo default and the environment is " +
+        $"'{builder.Environment.EnvironmentName}'. Anyone reading the repository could forge " +
+        "tokens. Generate one with: openssl rand -base64 48");
+
+// Password reset delivery. SMTP when configured; otherwise the logging sender, which only
+// writes the link to the console. Outside Development that would lock users out of their
+// accounts with no visible failure, so refuse to start rather than pretend to send mail.
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
+var smtpHost = builder.Configuration[$"{SmtpOptions.SectionName}:Host"];
+
+if (!string.IsNullOrWhiteSpace(smtpHost))
+    builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+else if (builder.Environment.IsDevelopment())
+    builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
+else
+    throw new InvalidOperationException(
+        $"Email__Smtp__Host is not configured and the environment is " +
+        $"'{builder.Environment.EnvironmentName}'. Password reset emails would be silently " +
+        "dropped, locking users out. Configure SMTP before deploying.");
 
 var jwtIssuer = builder.Configuration["Supabase:Issuer"] ?? "http://localhost:5133/auth/v1";
 var jwtAudience = builder.Configuration["Supabase:Audience"] ?? "authenticated";
@@ -75,6 +118,34 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             }
         };
     });
+
+// Rate limiting. /api/auth/* is public and every login attempt costs a bcrypt verify at
+// cost 11 (~100ms CPU), so an unlimited endpoint is both brute-forceable and a cheap
+// amplification vector against ourselves. Partitioned by client IP — see the forwarded
+// headers config above, without which every caller shares one bucket.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, token) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            context.HttpContext.Response.Headers.RetryAfter = ((int)retryAfter.TotalSeconds).ToString();
+
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsync(
+            """{"error":"Too many attempts. Please wait and try again."}""", token);
+    };
+
+    options.AddPolicy(RateLimitPolicies.Auth, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+});
 
 // Secure by default: a new controller is protected unless it explicitly opts out.
 builder.Services.AddAuthorization(options =>
@@ -118,7 +189,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseForwardedHeaders();
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

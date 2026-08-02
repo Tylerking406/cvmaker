@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<Certification> Certifications => Set<Certification>();
     public DbSet<Achievement> Achievements => Set<Achievement>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     /// <summary>
     /// Stamps <see cref="Cv.UpdatedAt"/> on modified CVs.
@@ -58,6 +59,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<Project>().ToTable("projects");
         modelBuilder.Entity<Certification>().ToTable("certifications");
         modelBuilder.Entity<Achievement>().ToTable("achievements");
+        modelBuilder.Entity<PasswordResetToken>().ToTable("password_reset_tokens");
+
+        // Redemption looks tokens up by hash, and a user's outstanding tokens are
+        // invalidated on each new request.
+        modelBuilder.Entity<PasswordResetToken>().HasIndex(t => t.TokenHash);
+        modelBuilder.Entity<PasswordResetToken>().HasIndex(t => t.UserId);
 
         // Backstop for the duplicate-email check in AuthController.Register, which is a
         // read-then-write and therefore racy on its own.

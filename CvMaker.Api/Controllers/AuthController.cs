@@ -5,14 +5,23 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace CvMaker.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(AppDbContext db, TokenService tokens, IWebHostEnvironment env) : ControllerBase
+[EnableRateLimiting(RateLimitPolicies.Auth)]
+public class AuthController(
+    AppDbContext db,
+    TokenService tokens,
+    IWebHostEnvironment env,
+    ILogger<AuthController> logger) : ControllerBase
 {
+    private string ClientIp => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
     /// <summary>
     /// A valid BCrypt hash used only to burn the same CPU time when an email is unknown,
     /// so response timing does not reveal whether an account exists.
@@ -57,8 +66,20 @@ public class AuthController(AppDbContext db, TokenService tokens, IWebHostEnviro
             UpdatedAt = DateTime.UtcNow,
         });
 
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when ((ex.InnerException as PostgresException)?.SqlState == "23505")
+        {
+            // The AnyAsync check above is read-then-write, so two concurrent registrations
+            // for the same email both pass it. The unique index catches the loser; without
+            // this it would surface as a bare 500.
+            logger.LogInformation("Registration lost the unique-index race for {Email}", email);
+            return Conflict(new { error = "An account with this email already exists." });
+        }
 
+        logger.LogInformation("Registered user {UserId} from {ClientIp}", user.Id, ClientIp);
         return StatusCode(StatusCodes.Status201Created, IssueToken(user));
     }
 
@@ -76,8 +97,12 @@ public class AuthController(AppDbContext db, TokenService tokens, IWebHostEnviro
         var ok = BCrypt.Net.BCrypt.Verify(request.Password ?? "", hash);
 
         if (user is null || user.PasswordHash is null || !ok)
+        {
+            logger.LogWarning("Failed login for {Email} from {ClientIp}", email, ClientIp);
             return Unauthorized(new { error = InvalidCredentials });
+        }
 
+        logger.LogInformation("Login for user {UserId} from {ClientIp}", user.Id, ClientIp);
         return Ok(IssueToken(user));
     }
 
@@ -99,6 +124,59 @@ public class AuthController(AppDbContext db, TokenService tokens, IWebHostEnviro
 
         return Ok(new AuthResponse(token, "Bearer", tokens.ExpirySeconds,
             new AuthUser(user.Id, user.Email, user.Name)));
+    }
+
+    /// <remarks>
+    /// Always returns 200, whether or not the address is registered. Reporting "no such
+    /// account" here would turn this endpoint into an account-enumeration oracle, which is
+    /// the same reason Login uses one message for every failure.
+    /// </remarks>
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ForgotPassword(
+        ForgotPasswordRequest request, PasswordResetService resets, IEmailSender email, IConfiguration config)
+    {
+        var address = (request.Email ?? "").Trim().ToLowerInvariant();
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == address);
+
+        if (user is not null)
+        {
+            var token = await resets.IssueAsync(user);
+            var baseUrl = config["App:PublicUrl"] ?? "http://localhost:3000";
+            await email.SendPasswordResetAsync(user.Email, $"{baseUrl}/reset-password?token={token}");
+            logger.LogInformation("Password reset requested for user {UserId} from {ClientIp}", user.Id, ClientIp);
+        }
+        else
+        {
+            logger.LogInformation("Password reset requested for unknown address from {ClientIp}", ClientIp);
+        }
+
+        return Ok(new { message = "If that email is registered, a reset link is on its way." });
+    }
+
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPassword(ResetPasswordRequest request, PasswordResetService resets)
+    {
+        if (string.IsNullOrEmpty(request.Password) || request.Password.Length < 8)
+            return BadRequest(new { error = "Password must be at least 8 characters." });
+
+        var token = await resets.FindRedeemableAsync(request.Token ?? "");
+        if (token is null)
+        {
+            logger.LogWarning("Invalid or expired password reset token used from {ClientIp}", ClientIp);
+            return BadRequest(new { error = "This reset link is invalid or has expired." });
+        }
+
+        token.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password, 11);
+        token.UsedAt = DateTime.UtcNow;   // single use
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Password reset completed for user {UserId} from {ClientIp}", token.UserId, ClientIp);
+
+        // Note: tokens carry no jti and there is no session store, so existing sessions for
+        // this account stay valid until they expire (<= Supabase:ExpiryMinutes).
+        return Ok(new { message = "Password updated. You can now sign in." });
     }
 
     [HttpPost("logout")]

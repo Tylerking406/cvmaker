@@ -1,5 +1,8 @@
 # Local dev secrets - never commit
 appsettings.Development.json
+.env
+.env.local
+!.env.example
 
 # .NET build output
 bin/
