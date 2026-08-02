@@ -1,15 +1,26 @@
--- CV Maker Schema
--- Run this in Supabase SQL Editor
--- Supabase Auth handles the users table automatically.
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- NOT USED BY THE APPLICATION. Reference target only.
+-- ═══════════════════════════════════════════════════════════════════════════════
 --
--- Deliberately NO `users` table here — it would collide with GoTrue's auth.users.
--- Locally (schema.local.sql) a `users` table with password_hash + name substitutes
--- for auth.users; on Supabase, credentials are managed by Auth and `name` lives in
--- auth.users.raw_user_meta_data.
+-- This file documents what the schema would look like if CvMaker were migrated to
+-- real Supabase Auth (GoTrue). Do not apply it — the app does not work against it.
 --
--- The API mints JWTs in Supabase's claim shape (sub / email / aud=authenticated /
--- role=authenticated), so the `auth.uid() = user_id` RLS policies below stay valid
--- when this app is pointed at a real Supabase project.
+-- Today the .NET API owns authentication and mints its own JWTs, and the live schema
+-- is defined by EF Core migrations in CvMaker.Api/Data/Migrations/. That schema has a
+-- local `users` table with password_hash; this file deliberately has none, because it
+-- would collide with GoTrue's auth.users.
+--
+-- The RLS policies below are INERT outside a real Supabase project: nothing in the
+-- .NET path sets auth.uid(), so under a plain role they would deny everything, and
+-- under the table owner they are bypassed entirely. Ownership is currently enforced in
+-- application code — Auth/CvOwnershipFilter.cs and the `c.UserId == uid` predicates in
+-- CvsController.
+--
+-- Migrating for real would mean: dropping the local users table, repointing cvs.user_id
+-- at auth.users, switching the API from minting tokens to validating Supabase's, and
+-- moving `name` into auth.users.raw_user_meta_data. The token claim shape already
+-- matches (sub / email / aud=authenticated / role=authenticated), which is what makes
+-- that swap a config change rather than a rewrite.
 
 -- Enable UUID generation
 create extension if not exists "pgcrypto";

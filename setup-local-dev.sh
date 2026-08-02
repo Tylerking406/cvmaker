@@ -141,10 +141,12 @@ else
 fi
 
 # ─────────────────────────────────────────
-# 9. Apply DB schema
+# 9. Database schema
 # ─────────────────────────────────────────
-info "Applying schema.local.sql to '$DB_NAME'..."
-PGPASSWORD="$DB_PASS" psql -U "$DB_USER" -d "$DB_NAME" -h localhost -f "$CLONE_DIR/schema.local.sql"
+# Nothing to apply here: EF Core migrations own the schema and run automatically on the
+# API's first start. Applying SQL by hand would leave the tables in place with an empty
+# __EFMigrationsHistory, and the API would then fail with "relation already exists".
+info "Schema will be created by EF migrations on first API start."
 
 # ─────────────────────────────────────────
 # 10. Restore NuGet packages

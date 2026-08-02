@@ -11,20 +11,16 @@ public static class DbInitializer
     private const string SeedEmail = "arinao.dev@gmail.com";
 
     /// <summary>
-    /// Development-only. Brings an already-provisioned database up to date and seeds the
-    /// documented dev account.
+    /// Development-only fixture data — the documented dev account. Schema is owned by EF
+    /// migrations; this only inserts rows.
     /// </summary>
     /// <remarks>
-    /// The ALTERs exist because Postgres only runs /docker-entrypoint-initdb.d/* on the
-    /// first init of an empty volume — an existing postgres_data volume would otherwise
-    /// never gain password_hash, and every login would fail on an unknown column.
-    /// Both statements are idempotent, so this is safe on a fresh volume too.
+    /// Credentials are reset on every start deliberately: this is disposable fixture data
+    /// and the password in DEVELOPMENT.md must always work. Never enable outside
+    /// Development — see the Seed:Enabled guard in Program.cs.
     /// </remarks>
     public static async Task SeedAsync(AppDbContext db, string seedPassword)
     {
-        await db.Database.ExecuteSqlRawAsync("alter table users add column if not exists password_hash text;");
-        await db.Database.ExecuteSqlRawAsync("alter table users add column if not exists name text;");
-
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == SeedEmail);
         if (user is null)
         {
@@ -32,10 +28,8 @@ public static class DbInitializer
             db.Users.Add(user);
         }
 
-        user.Name ??= "Arinao Ndou";
-        // Re-hash every start so the documented password is always valid, even if the row
-        // predates the password_hash column.
-        user.PasswordHash ??= BCrypt.Net.BCrypt.HashPassword(seedPassword, 11);
+        user.Name = "Arinao Ndou";
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(seedPassword, 11);
 
         await db.SaveChangesAsync();
     }

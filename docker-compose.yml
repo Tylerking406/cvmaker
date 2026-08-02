@@ -11,8 +11,10 @@ services:
     ports:
       - "5433:5432"
     volumes:
+      # No initdb schema mount: EF migrations create the schema on API start. Mounting a
+      # schema here as well would make initdb create the tables first, and the API's
+      # Migrate() would then die on "relation already exists".
       - postgres_data:/var/lib/postgresql/data
-      - ./schema.local.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cvmaker -d cvmaker"]
       interval: 5s
@@ -38,6 +40,9 @@ services:
       # Supabase project, use that project's JWT secret and issuer here.
       Supabase__JwtSecret: ${SUPABASE_JWT_SECRET:-local-dev-only-secret-change-me-32chars-min}
       Supabase__Issuer: http://localhost:5133/auth/v1
+      # Dev fixture account (arinao.dev@gmail.com). Requires Development as well; the API
+      # refuses to seed on either signal alone.
+      Seed__Enabled: "true"
     ports:
       - "5133:5133"
     healthcheck:

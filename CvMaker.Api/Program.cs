@@ -92,16 +92,31 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+using (var scope = app.Services.CreateScope())
 {
-    using var scope = app.Services.CreateScope();
-    await DbInitializer.SeedAsync(
-        scope.ServiceProvider.GetRequiredService<AppDbContext>(),
-        builder.Configuration["Seed:Password"] ?? "Test1234");
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Migrations are the only source of truth for the schema, in every environment.
+    // Single-instance assumption: concurrent replicas can deadlock on the history table,
+    // so a multi-replica deployment should switch to `dotnet ef migrations bundle` run as
+    // a deploy step instead.
+    await db.Database.MigrateAsync();
+
+    // Seed after migrating — it writes to users. Two locks, not one: a stray
+    // ASPNETCORE_ENVIRONMENT=Development must not be enough on its own to plant a
+    // known-credentials account, and the Dockerfile/compose pair already disagree about
+    // which environment the container runs in.
+    if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Seed:Enabled"))
+        await DbInitializer.SeedAsync(db, builder.Configuration["Seed:Password"] ?? "Test1234");
 }
 
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    // Swagger is middleware, not a routed endpoint, so the FallbackPolicy never covered
+    // it — an environment check is the only thing keeping the API surface private.
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 app.UseCors();
 app.UseAuthentication();
