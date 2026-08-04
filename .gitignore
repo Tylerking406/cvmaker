@@ -4,6 +4,9 @@ appsettings.Development.json
 .env.local
 !.env.example
 
+# Database dumps written by scripts/backup-db.sh
+backups/
+
 # .NET build output
 bin/
 obj/

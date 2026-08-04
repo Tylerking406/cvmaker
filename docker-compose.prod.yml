@@ -1,0 +1,74 @@
+# Production override. Always applied on top of the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Every value here comes from .env with no default. A missing variable should stop the
+# deploy loudly rather than quietly fall back to a development value — that fallback is
+# exactly how a public deployment ends up signing tokens with the key committed to this
+# repository.
+
+services:
+
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    # Base file publishes 5433 to the host. On a public IP that puts Postgres on the
+    # internet. Only the api container needs it, over the compose network.
+    ports: !override []
+
+  api:
+    # The single most important line in this file. It activates the startup guards that
+    # reject the public repo-default signing key and the missing-SMTP config, and it stops
+    # Swagger being served. Without it the deploy is silently insecure.
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: >-
+        Host=db;Port=5432;Database=cvmaker;Username=cvmaker;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      CORS_ORIGIN: https://${DOMAIN:?set DOMAIN in .env}
+      Supabase__JwtSecret: ${SUPABASE_JWT_SECRET:?generate with openssl rand -base64 48}
+      Supabase__Issuer: https://${DOMAIN}/auth/v1
+      # Used to build password reset links. Wrong value here means every reset email
+      # points somewhere unreachable.
+      App__PublicUrl: https://${DOMAIN}
+      Email__Smtp__Host: ${SMTP_HOST:?set SMTP_HOST in .env}
+      Email__Smtp__Port: ${SMTP_PORT:-587}
+      Email__Smtp__Username: ${SMTP_USERNAME:?set SMTP_USERNAME in .env}
+      Email__Smtp__Password: ${SMTP_PASSWORD:?set SMTP_PASSWORD in .env}
+      Email__Smtp__From: ${SMTP_FROM:?set SMTP_FROM in .env}
+      # Must be set explicitly to "false", not merely omitted: compose MERGES environment
+      # maps, so leaving it out inherits "true" from the base file and would create the
+      # fixture account arinao.dev@gmail.com / Test1234 on a public deployment.
+      # Belt and braces — the API also requires Development, which Production is not.
+      Seed__Enabled: "false"
+    ports: !override []
+
+  frontend:
+    # Bound to loopback so only Caddy can reach it — the container port is still open to
+    # the compose network, which is how Caddy gets there.
+    ports: !override
+      - "127.0.0.1:3000:3000"
+
+  # ─── Caddy: TLS termination + path routing ────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - api
+    ports:
+      - "80:80"     # ACME HTTP-01 challenge + redirect to HTTPS
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates live here. Losing this volume means re-issuing on every deploy, which
+      # will hit Let's Encrypt rate limits (5 per domain per week).
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

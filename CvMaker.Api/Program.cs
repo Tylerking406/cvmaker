@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 using CvMaker.Api.Auth;
@@ -19,10 +20,27 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    // Hosts are unknown at build time (Railway, Fly, a k8s ingress, …). Restrict these in
-    // a real deployment once the proxy's address is known.
+
+    // Only trust X-Forwarded-For from the reverse proxy. Left unrestricted, any client
+    // could set the header itself, claim a fresh IP per request, and walk straight through
+    // the per-IP auth rate limiter.
+    //
+    // TrustedProxyNetworks is a comma-separated CIDR list — set it to the Docker network
+    // Caddy runs on (see DEPLOYMENT.md). Defaults to RFC1918 ranges, which is correct when
+    // the API is only reachable from inside the compose network, as the prod override
+    // arranges by not publishing its port.
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
+
+    var networks = builder.Configuration["TrustedProxyNetworks"]
+        ?? "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16";
+
+    foreach (var cidr in networks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+        var parts = cidr.Split('/');
+        if (parts.Length == 2 && IPAddress.TryParse(parts[0], out var prefix) && int.TryParse(parts[1], out var length))
+            options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefix, length));
+    }
 });
 
 // CORS — allow the Next.js frontend origin (override via CORS_ORIGIN env var).

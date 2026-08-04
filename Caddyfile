@@ -1,0 +1,47 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# ── API ────────────────────────────────────────────────────────────────────
+	# Routed straight to the API rather than through the Next.js rewrite. That
+	# rewrite does not add X-Forwarded-For, so the API would see the frontend
+	# container's IP on every request and the per-IP auth rate limiter would
+	# collapse into a single shared bucket — ten failed logins from any one person
+	# would lock out everybody.
+	#
+	# Same hostname either way, so the auth cookie is still same-origin.
+	handle /api/* {
+		reverse_proxy api:5133 {
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+		}
+	}
+
+	# ── Everything else: the Next.js app ───────────────────────────────────────
+	handle {
+		reverse_proxy frontend:3000 {
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+		}
+	}
+
+	header {
+		# Only sent over HTTPS; Caddy redirects HTTP itself.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Caddy advertises itself by default; no reason to.
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
